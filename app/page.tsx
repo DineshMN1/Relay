@@ -1,7 +1,11 @@
 import Link from 'next/link'
+import { redirect } from 'next/navigation'
 import { Package, Route, Wallet } from 'lucide-react'
+import { getSession } from '@/lib/auth'
 
-export default function Home() {
+export default async function Home() {
+  const session = await getSession()
+  if (session) redirect('/dashboard')
   return (
     <main className="min-h-screen bg-white">
       <div className="max-w-5xl mx-auto px-6 py-20 flex flex-col items-center text-center">

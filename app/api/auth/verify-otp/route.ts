@@ -5,9 +5,10 @@ import { signToken } from '@/lib/auth'
 export const dynamic = 'force-dynamic'
 
 export async function POST(req: NextRequest) {
-  const { email, code, name } = await req.json()
+  const { email, code } = await req.json()
 
-  if (!email || !code) return NextResponse.json({ error: 'Email and code required' }, { status: 400 })
+  if (!email || !code)
+    return NextResponse.json({ error: 'Email and code required' }, { status: 400 })
 
   const otp = await prisma.oTP.findFirst({
     where: { email, code, used: false, expiresAt: { gt: new Date() } },
@@ -18,18 +19,11 @@ export async function POST(req: NextRequest) {
 
   await prisma.oTP.update({ where: { id: otp.id }, data: { used: true } })
 
-  // Upsert user
-  let user = await prisma.user.findUnique({ where: { email } })
-  if (!user) {
-    if (!name) return NextResponse.json({ error: 'Name required for new user' }, { status: 400 })
-    user = await prisma.user.create({
-      data: {
-        email,
-        name,
-        wallet: { create: { balance: 0 } },
-      },
-    })
-  }
+  // Mark user as verified
+  const user = await prisma.user.update({
+    where: { email },
+    data: { emailVerified: true },
+  })
 
   const token = await signToken({ userId: user.id, email: user.email })
 

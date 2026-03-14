@@ -1,34 +1,75 @@
 'use client'
 
 import { useState } from 'react'
-import { ArrowLeft, Loader2 } from 'lucide-react'
+import { ArrowLeft, Eye, EyeOff, Loader2 } from 'lucide-react'
 
-type Step = 'email' | 'otp'
+type Tab  = 'login' | 'register'
+type Step = 'form' | 'otp'
 
 export default function LoginPage() {
-  const [step,    setStep]    = useState<Step>('email')
-  const [email,   setEmail]   = useState('')
-  const [name,    setName]    = useState('')
-  const [otp,     setOtp]     = useState('')
-  const [isNew,   setIsNew]   = useState(false)
-  const [loading, setLoading] = useState(false)
-  const [error,   setError]   = useState('')
+  const [tab,      setTab]      = useState<Tab>('login')
+  const [step,     setStep]     = useState<Step>('form')
+  const [loading,  setLoading]  = useState(false)
+  const [error,    setError]    = useState('')
 
-  async function handleSendOTP(e: React.FormEvent) {
+  // login fields
+  const [loginEmail,    setLoginEmail]    = useState('')
+  const [loginPassword, setLoginPassword] = useState('')
+  const [showLoginPass, setShowLoginPass] = useState(false)
+
+  // register fields
+  const [regName,     setRegName]     = useState('')
+  const [regEmail,    setRegEmail]    = useState('')
+  const [regPassword, setRegPassword] = useState('')
+  const [regConfirm,  setRegConfirm]  = useState('')
+  const [showRegPass,  setShowRegPass]  = useState(false)
+  const [showRegConf,  setShowRegConf]  = useState(false)
+
+  // otp
+  const [otp, setOtp] = useState('')
+
+  function switchTab(t: Tab) {
+    setTab(t)
+    setStep('form')
+    setError('')
+    setOtp('')
+  }
+
+  async function handleLogin(e: React.FormEvent) {
     e.preventDefault()
     setError('')
     setLoading(true)
     try {
-      const res = await fetch('/api/auth/send-otp', {
+      const res  = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, name }),
+        body: JSON.stringify({ email: loginEmail, password: loginPassword }),
       })
       const data = await res.json()
       if (!res.ok) { setError(data.error); return }
-      if (data.otp) setOtp(data.otp)
-      setStep('otp')
+      window.location.href = '/dashboard'
+    } finally {
+      setLoading(false)
+    }
+  }
 
+  async function handleRegister(e: React.FormEvent) {
+    e.preventDefault()
+    setError('')
+    setLoading(true)
+    try {
+      const res  = await fetch('/api/auth/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: regName, email: regEmail,
+          password: regPassword, confirmPassword: regConfirm,
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) { setError(data.error); return }
+      if (data.otp) setOtp(data.otp) // dev mode
+      setStep('otp')
     } finally {
       setLoading(false)
     }
@@ -42,10 +83,10 @@ export default function LoginPage() {
     setError('')
     setLoading(true)
     try {
-      const res = await fetch('/api/auth/verify-otp', {
+      const res  = await fetch('/api/auth/verify-otp', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, code: otpCode, name: isNew ? name : undefined }),
+        body: JSON.stringify({ email: regEmail, code: otpCode }),
       })
       const data = await res.json()
       if (!res.ok) { setError(data.error); return }
@@ -62,7 +103,7 @@ export default function LoginPage() {
         <div className="text-center mb-8">
           <span className="text-3xl font-black text-orange-500">Relay</span>
           <p className="text-sm text-gray-500 mt-1">
-            {step === 'email' ? 'Sign in or create your account' : `Check ${email} for your code`}
+            {step === 'otp' ? `Check ${regEmail} for your code` : 'Sign in or create your account'}
           </p>
         </div>
 
@@ -73,45 +114,8 @@ export default function LoginPage() {
             </div>
           )}
 
-          {step === 'email' ? (
-            <form onSubmit={handleSendOTP} className="space-y-4">
-              <div>
-                <label className="label">Email address</label>
-                <input
-                  type="email" required value={email}
-                  onChange={e => setEmail(e.target.value)}
-                  placeholder="you@example.com"
-                  className="input"
-                  autoFocus
-                />
-              </div>
-
-              <label className="flex items-center gap-2.5 cursor-pointer select-none">
-                <input
-                  type="checkbox" checked={isNew}
-                  onChange={e => setIsNew(e.target.checked)}
-                  className="w-4 h-4 accent-orange-500"
-                />
-                <span className="text-sm text-gray-600">New to Relay? Enter your name</span>
-              </label>
-
-              {isNew && (
-                <div>
-                  <label className="label">Full name</label>
-                  <input
-                    type="text" required={isNew} value={name}
-                    onChange={e => setName(e.target.value)}
-                    placeholder="Your name"
-                    className="input"
-                  />
-                </div>
-              )}
-
-              <button type="submit" disabled={loading} className="btn-primary w-full flex items-center justify-center gap-2">
-                {loading ? <><Loader2 size={16} className="animate-spin" /> Sending...</> : 'Send OTP'}
-              </button>
-            </form>
-          ) : (
+          {/* ── OTP step (register flow) ── */}
+          {step === 'otp' ? (
             <div className="space-y-4">
               <div>
                 <label className="label">One-time code</label>
@@ -129,7 +133,9 @@ export default function LoginPage() {
                   autoFocus
                 />
                 <p className="text-xs text-gray-400 mt-1.5">
-                  {loading ? <span className="text-orange-400 font-medium">Verifying your code…</span> : 'Valid for 10 minutes'}
+                  {loading
+                    ? <span className="text-orange-400 font-medium">Verifying your code…</span>
+                    : 'Valid for 10 minutes'}
                 </p>
               </div>
 
@@ -139,17 +145,142 @@ export default function LoginPage() {
                 disabled={loading || otp.length < 4}
                 className="btn-primary w-full flex items-center justify-center gap-2"
               >
-                {loading ? <><Loader2 size={16} className="animate-spin" /> Verifying...</> : 'Verify & continue'}
+                {loading ? <><Loader2 size={16} className="animate-spin" /> Verifying…</> : 'Verify & continue'}
               </button>
 
               <button
                 type="button"
-                onClick={() => { setStep('email'); setOtp(''); setError('') }}
+                onClick={() => { setStep('form'); setOtp(''); setError('') }}
                 className="w-full flex items-center justify-center gap-1.5 text-sm text-gray-400 hover:text-gray-600 transition-colors"
               >
                 <ArrowLeft size={14} /> Back
               </button>
             </div>
+
+          ) : (
+            <>
+              {/* ── Tab switcher ── */}
+              <div className="flex rounded-xl bg-gray-100 p-1 mb-5 gap-1">
+                {(['login', 'register'] as Tab[]).map(t => (
+                  <button
+                    key={t}
+                    type="button"
+                    onClick={() => switchTab(t)}
+                    className={`flex-1 py-1.5 text-sm font-medium rounded-lg transition-all ${
+                      tab === t
+                        ? 'bg-white shadow-sm text-gray-900'
+                        : 'text-gray-500 hover:text-gray-700'
+                    }`}
+                  >
+                    {t === 'login' ? 'Log in' : 'Create account'}
+                  </button>
+                ))}
+              </div>
+
+              {/* ── Login form ── */}
+              {tab === 'login' && (
+                <form onSubmit={handleLogin} className="space-y-4">
+                  <div>
+                    <label className="label">Email address</label>
+                    <input
+                      type="email" required value={loginEmail}
+                      onChange={e => setLoginEmail(e.target.value)}
+                      placeholder="you@example.com"
+                      className="input"
+                      autoFocus
+                    />
+                  </div>
+                  <div>
+                    <label className="label">Password</label>
+                    <div className="relative">
+                      <input
+                        type={showLoginPass ? 'text' : 'password'}
+                        required value={loginPassword}
+                        onChange={e => setLoginPassword(e.target.value)}
+                        placeholder="••••••••"
+                        className="input pr-10"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowLoginPass(v => !v)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                      >
+                        {showLoginPass ? <EyeOff size={16} /> : <Eye size={16} />}
+                      </button>
+                    </div>
+                  </div>
+                  <button type="submit" disabled={loading} className="btn-primary w-full flex items-center justify-center gap-2">
+                    {loading ? <><Loader2 size={16} className="animate-spin" /> Signing in…</> : 'Log in'}
+                  </button>
+                </form>
+              )}
+
+              {/* ── Register form ── */}
+              {tab === 'register' && (
+                <form onSubmit={handleRegister} className="space-y-4">
+                  <div>
+                    <label className="label">Full name</label>
+                    <input
+                      type="text" required value={regName}
+                      onChange={e => setRegName(e.target.value)}
+                      placeholder="Your name"
+                      className="input"
+                      autoFocus
+                    />
+                  </div>
+                  <div>
+                    <label className="label">Email address</label>
+                    <input
+                      type="email" required value={regEmail}
+                      onChange={e => setRegEmail(e.target.value)}
+                      placeholder="you@example.com"
+                      className="input"
+                    />
+                  </div>
+                  <div>
+                    <label className="label">Password</label>
+                    <div className="relative">
+                      <input
+                        type={showRegPass ? 'text' : 'password'}
+                        required value={regPassword}
+                        onChange={e => setRegPassword(e.target.value)}
+                        placeholder="Min 6 characters"
+                        className="input pr-10"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowRegPass(v => !v)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                      >
+                        {showRegPass ? <EyeOff size={16} /> : <Eye size={16} />}
+                      </button>
+                    </div>
+                  </div>
+                  <div>
+                    <label className="label">Confirm password</label>
+                    <div className="relative">
+                      <input
+                        type={showRegConf ? 'text' : 'password'}
+                        required value={regConfirm}
+                        onChange={e => setRegConfirm(e.target.value)}
+                        placeholder="Repeat password"
+                        className="input pr-10"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowRegConf(v => !v)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                      >
+                        {showRegConf ? <EyeOff size={16} /> : <Eye size={16} />}
+                      </button>
+                    </div>
+                  </div>
+                  <button type="submit" disabled={loading} className="btn-primary w-full flex items-center justify-center gap-2">
+                    {loading ? <><Loader2 size={16} className="animate-spin" /> Creating account…</> : 'Create account'}
+                  </button>
+                </form>
+              )}
+            </>
           )}
         </div>
       </div>
