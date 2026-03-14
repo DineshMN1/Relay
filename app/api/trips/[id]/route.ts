@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSessionFromRequest } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 
+export const dynamic = 'force-dynamic'
+
 // PATCH /api/trips/[id] — edit departure time
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
   const session = await getSessionFromRequest(req)

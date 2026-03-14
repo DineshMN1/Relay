@@ -3,6 +3,8 @@ import { prisma } from '@/lib/prisma'
 import { generateOTP } from '@/lib/auth'
 import { sendOTPEmail } from '@/lib/resend'
 
+export const dynamic = 'force-dynamic'
+
 const isDev = process.env.NODE_ENV !== 'production'
 
 export async function POST(req: NextRequest) {

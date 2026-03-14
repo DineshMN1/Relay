@@ -4,6 +4,8 @@ import { prisma } from '@/lib/prisma'
 import { generateOTP } from '@/lib/auth'
 import { isParcelOnRoute } from '@/lib/route-match'
 
+export const dynamic = 'force-dynamic'
+
 // POST /api/parcels — sender posts a delivery request
 export async function POST(req: NextRequest) {
   const session = await getSessionFromRequest(req)

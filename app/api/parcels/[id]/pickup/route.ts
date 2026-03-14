@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSessionFromRequest } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 
+export const dynamic = 'force-dynamic'
+
 // POST /api/parcels/[id]/pickup — carrier scans/enters pickup OTP
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
   const session = await getSessionFromRequest(req)

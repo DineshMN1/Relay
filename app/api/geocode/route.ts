@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 
+export const dynamic = 'force-dynamic'
+
 // GET /api/geocode?q=marina+beach — free Nominatim search
 export async function GET(req: NextRequest) {
   const q = new URL(req.url).searchParams.get('q')

@@ -3,6 +3,8 @@ import { getSessionFromRequest } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { getRouteGeometry } from '@/lib/route-match'
 
+export const dynamic = 'force-dynamic'
+
 // POST /api/trips — traveler posts their journey
 export async function POST(req: NextRequest) {
   const session = await getSessionFromRequest(req)

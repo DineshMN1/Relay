@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSessionFromRequest } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 
+export const dynamic = 'force-dynamic'
+
 // POST /api/location — update carrier's current location
 export async function POST(req: NextRequest) {
   const session = await getSessionFromRequest(req)
