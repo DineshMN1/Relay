@@ -1,0 +1,152 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(cuid())
+  name      String
+  email     String   @unique
+  createdAt DateTime @default(now())
+
+  trips          Trip[]
+  sentParcels    Parcel[]     @relation("SenderParcels")
+  carriedParcels Parcel[]     @relation("CarrierParcels")
+  wallet         Wallet?
+  ratingsGiven   Rating[]     @relation("RaterRatings")
+  ratingsReceived Rating[]    @relation("RatedRatings")
+  locationUpdates CarrierLocation[]
+}
+
+model OTP {
+  id        String   @id @default(cuid())
+  email     String
+  code      String
+  expiresAt DateTime
+  used      Boolean  @default(false)
+  createdAt DateTime @default(now())
+}
+
+// Traveler posts their journey route
+model Trip {
+  id            String     @id @default(cuid())
+  userId        String
+  user          User       @relation(fields: [userId], references: [id])
+
+  fromName      String
+  fromLat       Float
+  fromLng       Float
+  toName        String
+  toLat         Float
+  toLng         Float
+
+  // GeoJSON LineString from OSRM stored as JSON
+  routeGeometry Json
+
+  departureTime DateTime
+  status        TripStatus @default(ACTIVE)
+  createdAt     DateTime   @default(now())
+
+  acceptedParcels Parcel[]
+}
+
+enum TripStatus {
+  ACTIVE
+  COMPLETED
+  CANCELLED
+}
+
+// Sender posts a parcel delivery request
+model Parcel {
+  id          String       @id @default(cuid())
+  senderId    String
+  sender      User         @relation("SenderParcels", fields: [senderId], references: [id])
+  carrierId   String?
+  carrier     User?        @relation("CarrierParcels", fields: [carrierId], references: [id])
+  tripId      String?
+  trip        Trip?        @relation(fields: [tripId], references: [id])
+
+  pickupName  String
+  pickupLat   Float
+  pickupLng   Float
+  dropName    String
+  dropLat     Float
+  dropLng     Float
+
+  description String
+  weight      Float        @default(1)
+  reward      Float        @default(50)
+
+  // OTP for verification
+  pickupOtp   String
+  dropOtp     String
+
+  status      ParcelStatus @default(POSTED)
+  createdAt   DateTime     @default(now())
+
+  ratings     Rating[]
+}
+
+enum ParcelStatus {
+  POSTED
+  MATCHED
+  ACCEPTED
+  PICKED_UP
+  DELIVERED
+  CANCELLED
+  EXPIRED
+}
+
+model Wallet {
+  id      String   @id @default(cuid())
+  userId  String   @unique
+  user    User     @relation(fields: [userId], references: [id])
+  balance Float    @default(0)
+
+  transactions Transaction[]
+}
+
+model Transaction {
+  id          String          @id @default(cuid())
+  walletId    String
+  wallet      Wallet          @relation(fields: [walletId], references: [id])
+  amount      Float
+  type        TransactionType
+  description String?
+  referenceId String?
+  createdAt   DateTime        @default(now())
+}
+
+enum TransactionType {
+  CREDIT
+  DEBIT
+}
+
+model Rating {
+  id        String   @id @default(cuid())
+  raterId   String
+  rater     User     @relation("RaterRatings", fields: [raterId], references: [id])
+  ratedId   String
+  rated     User     @relation("RatedRatings", fields: [ratedId], references: [id])
+  parcelId  String
+  parcel    Parcel   @relation(fields: [parcelId], references: [id])
+  score     Int
+  comment   String?
+  createdAt DateTime @default(now())
+}
+
+// Carrier real-time location
+model CarrierLocation {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  lat       Float
+  lng       Float
+  updatedAt DateTime @default(now()) @updatedAt
+
+  @@unique([userId])
+}
