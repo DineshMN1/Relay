@@ -34,16 +34,18 @@ export default function LoginPage() {
     }
   }
 
-  async function handleVerifyOTP(e?: React.FormEvent) {
+  async function handleVerifyOTP(e?: React.FormEvent, code?: string) {
     e?.preventDefault()
     if (loading) return
+    const otpCode = code ?? otp
+    if (otpCode.length < 4) return
     setError('')
     setLoading(true)
     try {
       const res = await fetch('/api/auth/verify-otp', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, code: otp, name: isNew ? name : undefined }),
+        body: JSON.stringify({ email, code: otpCode, name: isNew ? name : undefined }),
       })
       const data = await res.json()
       if (!res.ok) { setError(data.error); return }
@@ -115,19 +117,26 @@ export default function LoginPage() {
                 <label className="label">One-time code</label>
                 <input
                   type="text" inputMode="numeric" maxLength={4} value={otp}
-                  onChange={e => setOtp(e.target.value.replace(/\D/g, ''))}
+                  onChange={e => {
+                    const val = e.target.value.replace(/\D/g, '')
+                    setOtp(val)
+                    if (val.length === 4 && !loading) handleVerifyOTP(undefined, val)
+                  }}
                   onKeyDown={e => e.key === 'Enter' && handleVerifyOTP()}
                   placeholder="0000"
-                  className="input text-center text-3xl tracking-[0.5em] font-bold py-4"
+                  disabled={loading}
+                  className="input text-center text-3xl tracking-[0.5em] font-bold py-4 disabled:opacity-60 disabled:cursor-not-allowed"
                   autoFocus
                 />
-                <p className="text-xs text-gray-400 mt-1.5">Valid for 10 minutes</p>
+                <p className="text-xs text-gray-400 mt-1.5">
+                  {loading ? <span className="text-orange-400 font-medium">Verifying your code…</span> : 'Valid for 10 minutes'}
+                </p>
               </div>
 
               <button
                 type="button"
                 onPointerDown={e => { e.preventDefault(); handleVerifyOTP() }}
-                disabled={loading}
+                disabled={loading || otp.length < 4}
                 className="btn-primary w-full flex items-center justify-center gap-2"
               >
                 {loading ? <><Loader2 size={16} className="animate-spin" /> Verifying...</> : 'Verify & continue'}
