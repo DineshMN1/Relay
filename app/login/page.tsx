@@ -29,7 +29,7 @@ export default function LoginPage() {
       const data = await res.json()
       if (!res.ok) { setError(data.error); return }
       setStep('otp')
-      if (data.devOtp) setOtp(data.devOtp)
+
     } finally {
       setLoading(false)
     }
