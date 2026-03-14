@@ -32,6 +32,13 @@ export default async function DashboardPage() {
   })
   if (!user) redirect('/login')
 
+  const incomingParcels = await prisma.parcel.findMany({
+    where: { recipientEmail: user.email.toLowerCase() },
+    include: { sender: { select: { name: true } } },
+    orderBy: { createdAt: 'desc' },
+    take: 5,
+  })
+
   const firstName = user.name.split(' ')[0]
 
   return (
@@ -140,7 +147,30 @@ export default async function DashboardPage() {
           </section>
         )}
 
-        {user.sentParcels.length === 0 && user.carriedParcels.length === 0 && (
+        {/* Incoming parcels — recipient view */}
+        {incomingParcels.length > 0 && (
+          <section>
+            <h2 className="text-sm font-bold text-gray-400 uppercase tracking-wide mb-3 px-1">Parcels for you</h2>
+            <div className="card divide-y divide-gray-50">
+              {incomingParcels.map(p => (
+                <Link key={p.id} href={`/parcels/${p.id}`} className="flex items-center gap-3 px-4 py-3.5 hover:bg-gray-50 transition-colors">
+                  <div className="flex-1 min-w-0">
+                    <p className="font-medium text-sm text-gray-900 truncate">
+                      {p.pickupName.split(',')[0]} &rarr; {p.dropName.split(',')[0]}
+                    </p>
+                    <p className="text-xs text-gray-400 mt-0.5">From {p.sender.name} &middot; {p.description}</p>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <span className={cn('badge', statusStyle[p.status])}>{p.status}</span>
+                    <ChevronRight size={14} className="text-gray-300" />
+                  </div>
+                </Link>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {user.sentParcels.length === 0 && user.carriedParcels.length === 0 && incomingParcels.length === 0 && (
           <div className="card p-10 text-center">
             <p className="text-gray-400 text-sm">No activity yet. Send a parcel or post a trip to get started.</p>
           </div>

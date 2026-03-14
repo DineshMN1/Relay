@@ -10,15 +10,17 @@ type Location = { name: string; lat: number; lng: number } | null
 
 export default function SendPage() {
   const router = useRouter()
-  const [pickup, setPickup] = useState<Location>(null)
-  const [drop,   setDrop]   = useState<Location>(null)
-  const [desc,   setDesc]   = useState('')
-  const [weight, setWeight] = useState('1')
-  const [reward, setReward] = useState('50')
+  const [pickup,         setPickup]         = useState<Location>(null)
+  const [drop,           setDrop]           = useState<Location>(null)
+  const [desc,           setDesc]           = useState('')
+  const [weight,         setWeight]         = useState('1')
+  const [reward,         setReward]         = useState('50')
+  const [recipientName,  setRecipientName]  = useState('')
+  const [recipientEmail, setRecipientEmail] = useState('')
   const [loading, setLoading] = useState(false)
   const [error,   setError]   = useState('')
   const [result,  setResult]  = useState<{
-    parcelId: string; pickupOtp: string; dropOtp: string; matched: boolean
+    parcelId: string; pickupOtp: string; matched: boolean
   } | null>(null)
 
   async function handleSubmit(e: React.FormEvent) {
@@ -34,6 +36,7 @@ export default function SendPage() {
           pickupName: pickup.name, pickupLat: pickup.lat, pickupLng: pickup.lng,
           dropName:   drop.name,   dropLat:   drop.lat,   dropLng:   drop.lng,
           description: desc, weight, reward,
+          recipientName, recipientEmail,
         }),
       })
       const data = await res.json()
@@ -41,7 +44,6 @@ export default function SendPage() {
       setResult({
         parcelId:  data.parcel.id,
         pickupOtp: data.parcel.pickupOtp,
-        dropOtp:   data.parcel.dropOtp,
         matched:   !!data.parcel.matchedTripId,
       })
     } finally {
@@ -79,15 +81,9 @@ export default function SendPage() {
               <p className="text-xs text-gray-400 mt-1">Show this to the carrier at pickup</p>
             </div>
 
-            <div className="bg-gray-50 rounded-xl p-4">
-              <p className="text-xs text-gray-400 uppercase tracking-wide font-semibold mb-2">Drop OTP</p>
-              <div className="flex items-center justify-between">
-                <span className="text-3xl font-black tracking-widest text-gray-800">{result.dropOtp}</span>
-                <button onClick={() => copy(result.dropOtp)} className="text-gray-300 hover:text-gray-500 transition-colors">
-                  <Copy size={16} />
-                </button>
-              </div>
-              <p className="text-xs text-gray-400 mt-1">Recipient shows this at delivery</p>
+            <div className="bg-blue-50 rounded-xl p-4">
+              <p className="text-xs text-blue-400 uppercase tracking-wide font-semibold mb-1">Drop OTP</p>
+              <p className="text-sm text-blue-600">Sent to the recipient — they will see it when they log in.</p>
             </div>
           </div>
 
@@ -153,6 +149,29 @@ export default function SendPage() {
                 onChange={e => setReward(e.target.value)}
                 className="input"
               />
+            </div>
+          </div>
+
+          <div className="border-t border-gray-100 pt-4 space-y-4">
+            <p className="text-xs font-bold text-gray-400 uppercase tracking-wide">Recipient</p>
+            <div>
+              <label className="label">Recipient name</label>
+              <input
+                required value={recipientName}
+                onChange={e => setRecipientName(e.target.value)}
+                placeholder="Who will receive this?"
+                className="input"
+              />
+            </div>
+            <div>
+              <label className="label">Recipient email</label>
+              <input
+                type="email" required value={recipientEmail}
+                onChange={e => setRecipientEmail(e.target.value)}
+                placeholder="recipient@example.com"
+                className="input"
+              />
+              <p className="text-xs text-gray-400 mt-1">They will see the drop QR when they log in</p>
             </div>
           </div>
 

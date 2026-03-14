@@ -3,9 +3,14 @@ import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import Link from 'next/link'
 import ParcelActions from './ParcelActions'
+import StatusStepper from '@/components/StatusStepper'
 import { formatCurrency, formatDate } from '@/lib/utils'
 import { ArrowLeft } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import dynamic from 'next/dynamic'
+
+const QRDisplay  = dynamic(() => import('@/components/QRDisplay'),  { ssr: false })
+const ParcelMap  = dynamic(() => import('@/components/ParcelMap'),  { ssr: false })
 
 const statusStyle: Record<string, string> = {
   POSTED:    'bg-blue-50 text-blue-600',
@@ -29,8 +34,14 @@ export default async function ParcelPage({ params }: { params: { id: string } })
   })
   if (!parcel) redirect('/dashboard')
 
-  const isSender  = parcel.senderId  === session.userId
-  const isCarrier = parcel.carrierId === session.userId
+  const isSender    = parcel.senderId  === session.userId
+  const isCarrier   = parcel.carrierId === session.userId
+  const isRecipient = parcel.recipientEmail?.toLowerCase() === session.email.toLowerCase()
+
+  // Fetch carrier location if parcel is in transit
+  const carrierLocation = (parcel.status === 'ACCEPTED' || parcel.status === 'PICKED_UP') && parcel.carrierId
+    ? await prisma.carrierLocation.findUnique({ where: { userId: parcel.carrierId } })
+    : null
 
   return (
     <div className="min-h-screen bg-gray-50 pb-20 sm:pb-0">
@@ -45,15 +56,45 @@ export default async function ParcelPage({ params }: { params: { id: string } })
             <p className="text-xs text-gray-400">#{parcel.id.slice(-8).toUpperCase()}</p>
           </div>
           <span className={cn('badge ml-auto', statusStyle[parcel.status] ?? 'bg-gray-50 text-gray-400')}>
-            {parcel.status}
+            {parcel.status.replace('_', ' ')}
           </span>
         </div>
 
         <div className="space-y-4">
 
-          {/* Route */}
+          {/* Status stepper */}
           <div className="card p-5">
-            <h2 className="text-xs font-bold text-gray-400 uppercase tracking-wide mb-4">Route</h2>
+            <h2 className="text-xs font-bold text-gray-400 uppercase tracking-wide mb-5">Delivery status</h2>
+            <StatusStepper status={parcel.status} />
+          </div>
+
+          {/* Map */}
+          <div className="card p-5">
+            <h2 className="text-xs font-bold text-gray-400 uppercase tracking-wide mb-3">Route map</h2>
+            <ParcelMap
+              pickupLat={parcel.pickupLat} pickupLng={parcel.pickupLng}
+              dropLat={parcel.dropLat}     dropLng={parcel.dropLng}
+              carrierLat={carrierLocation?.lat}
+              carrierLng={carrierLocation?.lng}
+            />
+            <div className="flex items-center gap-4 mt-3 text-xs text-gray-400">
+              <span className="flex items-center gap-1.5">
+                <span className="w-2.5 h-2.5 rounded-full bg-green-400 inline-block" /> Pickup
+              </span>
+              <span className="flex items-center gap-1.5">
+                <span className="w-2.5 h-2.5 rounded-full bg-red-400 inline-block" /> Drop
+              </span>
+              {carrierLocation && (
+                <span className="flex items-center gap-1.5">
+                  <span className="w-2.5 h-2.5 rounded-full bg-orange-400 inline-block" /> Carrier
+                </span>
+              )}
+            </div>
+          </div>
+
+          {/* Route text */}
+          <div className="card p-5">
+            <h2 className="text-xs font-bold text-gray-400 uppercase tracking-wide mb-4">Locations</h2>
             <div className="flex gap-4">
               <div className="flex flex-col items-center pt-1">
                 <div className="w-2.5 h-2.5 rounded-full bg-green-400" />
@@ -95,6 +136,12 @@ export default async function ParcelPage({ params }: { params: { id: string } })
                 <span>Sender</span>
                 <span className="font-medium text-gray-800">{parcel.sender.name}</span>
               </div>
+              {parcel.recipientName && (
+                <div className="flex justify-between">
+                  <span>Recipient</span>
+                  <span className="font-medium text-gray-800">{parcel.recipientName}</span>
+                </div>
+              )}
               {parcel.carrier && (
                 <div className="flex justify-between">
                   <span>Carrier</span>
@@ -108,21 +155,24 @@ export default async function ParcelPage({ params }: { params: { id: string } })
             </div>
           </div>
 
-          {/* OTPs — sender only, before delivery */}
+          {/* Sender: pickup QR only */}
           {isSender && parcel.status !== 'DELIVERED' && parcel.status !== 'CANCELLED' && (
             <div className="card p-5">
-              <h2 className="text-xs font-bold text-gray-400 uppercase tracking-wide mb-4">Your OTPs</h2>
-              <div className="grid grid-cols-2 gap-3">
-                <div className="bg-orange-50 rounded-xl p-4 text-center">
-                  <p className="text-xs text-gray-400 uppercase tracking-wide font-semibold">Pickup</p>
-                  <p className="text-3xl font-black tracking-widest text-orange-500 mt-1">{parcel.pickupOtp}</p>
-                  <p className="text-xs text-gray-400 mt-1">Give to carrier</p>
-                </div>
-                <div className="bg-gray-50 rounded-xl p-4 text-center">
-                  <p className="text-xs text-gray-400 uppercase tracking-wide font-semibold">Drop</p>
-                  <p className="text-3xl font-black tracking-widest text-gray-800 mt-1">{parcel.dropOtp}</p>
-                  <p className="text-xs text-gray-400 mt-1">Recipient uses</p>
-                </div>
+              <h2 className="text-xs font-bold text-gray-400 uppercase tracking-wide mb-1">Pickup QR</h2>
+              <p className="text-sm text-gray-500 mb-4">Show this to the carrier when they collect the parcel.</p>
+              <div className="max-w-[180px] mx-auto">
+                <QRDisplay value={`otp=${parcel.pickupOtp}`} label="Pickup" otp={parcel.pickupOtp} color="#f97316" />
+              </div>
+            </div>
+          )}
+
+          {/* Recipient: drop QR only */}
+          {isRecipient && !isSender && parcel.status !== 'DELIVERED' && parcel.status !== 'CANCELLED' && (
+            <div className="card p-5">
+              <h2 className="text-xs font-bold text-gray-400 uppercase tracking-wide mb-1">Your delivery QR</h2>
+              <p className="text-sm text-gray-500 mb-4">Show this to the carrier when your parcel arrives.</p>
+              <div className="max-w-[180px] mx-auto">
+                <QRDisplay value={`otp=${parcel.dropOtp}`} label="Drop" otp={parcel.dropOtp} color="#111827" />
               </div>
             </div>
           )}

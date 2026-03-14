@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import LocationSearch from '@/components/LocationSearch'
 import Link from 'next/link'
@@ -30,10 +30,10 @@ export default function TravelPage() {
   const [parcels,  setParcels]  = useState<Parcel[]>([])
   const [accepting, setAccepting] = useState<string | null>(null)
 
-  useEffect(() => { if (tripId) fetchParcels() }, [tripId])
+  // fetchParcels is called directly after trip creation — no effect needed
 
-  async function fetchParcels() {
-    const res  = await fetch('/api/parcels?role=carrier')
+  async function fetchParcels(id: string) {
+    const res  = await fetch(`/api/parcels?role=carrier&tripId=${id}`)
     const data = await res.json()
     setParcels(data.parcels || [])
   }
@@ -56,6 +56,7 @@ export default function TravelPage() {
       const data = await res.json()
       if (!res.ok) { setError(data.error); return }
       setTripId(data.trip.id)
+      fetchParcels(data.trip.id)
     } finally {
       setLoading(false)
     }

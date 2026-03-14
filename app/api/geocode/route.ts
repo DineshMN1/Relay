@@ -10,7 +10,7 @@ export async function GET(req: NextRequest) {
   const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&format=json&limit=5&countrycodes=in`
   const res = await fetch(url, {
     headers: { 'User-Agent': 'RelayApp/1.0' },
-    next: { revalidate: 60 },
+    cache: 'no-store',
   })
   const data = await res.json()
 

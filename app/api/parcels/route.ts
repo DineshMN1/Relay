@@ -11,10 +11,10 @@ export async function POST(req: NextRequest) {
   const session = await getSessionFromRequest(req)
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const { pickupName, pickupLat, pickupLng, dropName, dropLat, dropLng, description, weight, reward } =
+  const { pickupName, pickupLat, pickupLng, dropName, dropLat, dropLng, description, weight, reward, recipientName, recipientEmail } =
     await req.json()
 
-  if (!pickupName || !pickupLat || !dropName || !dropLat || !description) {
+  if (!pickupName || !pickupLat || !dropName || !dropLat || !description || !recipientName || !recipientEmail) {
     return NextResponse.json({ error: 'All fields required' }, { status: 400 })
   }
 
@@ -29,6 +29,8 @@ export async function POST(req: NextRequest) {
       description,
       weight:  parseFloat(weight  || '1'),
       reward:  parseFloat(reward  || '50'),
+      recipientName,
+      recipientEmail: recipientEmail.toLowerCase().trim(),
       pickupOtp,
       dropOtp,
     },
@@ -68,14 +70,34 @@ export async function GET(req: NextRequest) {
   const role = searchParams.get('role') // 'sender' | 'carrier'
 
   if (role === 'carrier') {
-    // Carrier sees POSTED or MATCHED parcels (not yet accepted by someone else)
-    const parcels = await prisma.parcel.findMany({
+    const tripId = searchParams.get('tripId')
+    if (!tripId) return NextResponse.json({ parcels: [] })
+
+    // Fetch this trip's route geometry
+    const trip = await prisma.trip.findUnique({ where: { id: tripId } })
+    if (!trip) return NextResponse.json({ error: 'Trip not found' }, { status: 404 })
+
+    // Get all unaccepted parcels
+    const candidates = await prisma.parcel.findMany({
       where: { status: { in: ['POSTED', 'MATCHED'] }, carrierId: null },
       include: { sender: { select: { id: true, name: true } } },
       orderBy: { createdAt: 'desc' },
     })
+
+    // Filter only parcels whose pickup + drop lie along THIS trip's route
+    const parcels = candidates.filter(p =>
+      isParcelOnRoute(
+        trip.routeGeometry as unknown as GeoJSON.LineString,
+        p.pickupLat, p.pickupLng,
+        p.dropLat,   p.dropLng,
+      )
+    )
+
     return NextResponse.json({ parcels })
   }
+
+  const user = await prisma.user.findUnique({ where: { id: session.userId } })
+  if (!user) return NextResponse.json({ error: 'User not found' }, { status: 404 })
 
   // Sender sees their own parcels
   const parcels = await prisma.parcel.findMany({
@@ -86,5 +108,13 @@ export async function GET(req: NextRequest) {
     },
     orderBy: { createdAt: 'desc' },
   })
-  return NextResponse.json({ parcels })
+
+  // Incoming parcels where this user is the recipient
+  const incoming = await prisma.parcel.findMany({
+    where: { recipientEmail: user.email.toLowerCase() },
+    include: { sender: { select: { id: true, name: true } } },
+    orderBy: { createdAt: 'desc' },
+  })
+
+  return NextResponse.json({ parcels, incoming })
 }

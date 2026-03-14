@@ -15,6 +15,10 @@ export async function POST(req: NextRequest) {
 
   await prisma.oTP.create({ data: { email, code: otp, expiresAt } })
 
+  if (process.env.NODE_ENV === 'development') {
+    return NextResponse.json({ message: 'OTP sent', otp })
+  }
+
   try {
     await sendOTPEmail(email, otp, name)
   } catch (err) {

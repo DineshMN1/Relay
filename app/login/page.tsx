@@ -1,13 +1,11 @@
 'use client'
 
 import { useState } from 'react'
-import { useRouter } from 'next/navigation'
 import { ArrowLeft, Loader2 } from 'lucide-react'
 
 type Step = 'email' | 'otp'
 
 export default function LoginPage() {
-  const router = useRouter()
   const [step,    setStep]    = useState<Step>('email')
   const [email,   setEmail]   = useState('')
   const [name,    setName]    = useState('')
@@ -28,6 +26,7 @@ export default function LoginPage() {
       })
       const data = await res.json()
       if (!res.ok) { setError(data.error); return }
+      if (data.otp) setOtp(data.otp)
       setStep('otp')
 
     } finally {
@@ -35,8 +34,9 @@ export default function LoginPage() {
     }
   }
 
-  async function handleVerifyOTP(e: React.FormEvent) {
-    e.preventDefault()
+  async function handleVerifyOTP(e?: React.FormEvent) {
+    e?.preventDefault()
+    if (loading) return
     setError('')
     setLoading(true)
     try {
@@ -47,7 +47,7 @@ export default function LoginPage() {
       })
       const data = await res.json()
       if (!res.ok) { setError(data.error); return }
-      router.push('/dashboard')
+      window.location.href = '/dashboard'
     } finally {
       setLoading(false)
     }
@@ -110,12 +110,13 @@ export default function LoginPage() {
               </button>
             </form>
           ) : (
-            <form onSubmit={handleVerifyOTP} className="space-y-4">
+            <div className="space-y-4">
               <div>
                 <label className="label">One-time code</label>
                 <input
-                  type="text" required maxLength={4} value={otp}
+                  type="text" inputMode="numeric" maxLength={4} value={otp}
                   onChange={e => setOtp(e.target.value.replace(/\D/g, ''))}
+                  onKeyDown={e => e.key === 'Enter' && handleVerifyOTP()}
                   placeholder="0000"
                   className="input text-center text-3xl tracking-[0.5em] font-bold py-4"
                   autoFocus
@@ -123,7 +124,12 @@ export default function LoginPage() {
                 <p className="text-xs text-gray-400 mt-1.5">Valid for 10 minutes</p>
               </div>
 
-              <button type="submit" disabled={loading} className="btn-primary w-full flex items-center justify-center gap-2">
+              <button
+                type="button"
+                onPointerDown={e => { e.preventDefault(); handleVerifyOTP() }}
+                disabled={loading}
+                className="btn-primary w-full flex items-center justify-center gap-2"
+              >
                 {loading ? <><Loader2 size={16} className="animate-spin" /> Verifying...</> : 'Verify & continue'}
               </button>
 
@@ -134,7 +140,7 @@ export default function LoginPage() {
               >
                 <ArrowLeft size={14} /> Back
               </button>
-            </form>
+            </div>
           )}
         </div>
       </div>
