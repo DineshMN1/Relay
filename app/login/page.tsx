@@ -46,9 +46,9 @@ export default function LoginPage() {
         body: JSON.stringify({ email: loginEmail, password: loginPassword }),
       })
       const data = await res.json()
-      if (!res.ok) { setError(data.error); return }
+      if (!res.ok) { setError(data.error); setLoading(false); return }
       window.location.href = '/dashboard'
-    } finally {
+    } catch {
       setLoading(false)
     }
   }
@@ -80,6 +80,7 @@ export default function LoginPage() {
     if (loading) return
     const otpCode = code ?? otp
     if (otpCode.length < 4) return
+    let redirecting = false
     setError('')
     setLoading(true)
     try {
@@ -90,9 +91,10 @@ export default function LoginPage() {
       })
       const data = await res.json()
       if (!res.ok) { setError(data.error); return }
+      redirecting = true
       window.location.href = '/dashboard'
     } finally {
-      setLoading(false)
+      if (!redirecting) setLoading(false)
     }
   }
 
