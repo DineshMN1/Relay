@@ -21,19 +21,47 @@ export default async function DashboardPage() {
   const session = await getSession()
   if (!session) redirect('/login')
 
+  // Lazy-complete past trips before loading dashboard
+  await prisma.trip.updateMany({
+    where: { status: 'ACTIVE', departureTime: { lt: new Date() } },
+    data: { status: 'COMPLETED' },
+  })
+  // Lazy-expire overdue parcels
+  await prisma.parcel.updateMany({
+    where: { status: { in: ['POSTED', 'MATCHED'] }, expiresAt: { not: null, lt: new Date() } },
+    data: { status: 'EXPIRED' },
+  })
+
   const user = await prisma.user.findUnique({
     where: { id: session.userId },
     include: {
       wallet: true,
-      sentParcels:    { orderBy: { createdAt: 'desc' }, take: 5 },
-      carriedParcels: { orderBy: { createdAt: 'desc' }, take: 5 },
-      trips:          { orderBy: { createdAt: 'desc' }, take: 3 },
+      // Only active (in-progress) parcels on dashboard
+      sentParcels: {
+        where: { status: { in: ['POSTED', 'MATCHED', 'ACCEPTED', 'PICKED_UP'] } },
+        orderBy: { createdAt: 'desc' },
+        take: 5,
+      },
+      carriedParcels: {
+        where: { status: { in: ['ACCEPTED', 'PICKED_UP'] } },
+        orderBy: { createdAt: 'desc' },
+        take: 5,
+      },
+      // Only future active trips
+      trips: {
+        where: { status: 'ACTIVE', departureTime: { gte: new Date() } },
+        orderBy: { departureTime: 'asc' },
+        take: 3,
+      },
     },
   })
   if (!user) redirect('/login')
 
   const incomingParcels = await prisma.parcel.findMany({
-    where: { recipientEmail: user.email.toLowerCase() },
+    where: {
+      recipientEmail: user.email.toLowerCase(),
+      status: { in: ['POSTED', 'MATCHED', 'ACCEPTED', 'PICKED_UP'] },
+    },
     include: { sender: { select: { name: true } } },
     orderBy: { createdAt: 'desc' },
     take: 5,
@@ -75,10 +103,13 @@ export default async function DashboardPage() {
           </Link>
         </div>
 
-        {/* Sent parcels */}
+        {/* Active sent parcels */}
         {user.sentParcels.length > 0 && (
           <section>
-            <h2 className="text-sm font-bold text-gray-400 uppercase tracking-wide mb-3 px-1">Sent parcels</h2>
+            <div className="flex items-center justify-between mb-3 px-1">
+              <h2 className="text-sm font-bold text-gray-400 uppercase tracking-wide">Active parcels</h2>
+              <Link href="/profile?tab=parcels" className="text-xs text-orange-500 font-semibold">See all</Link>
+            </div>
             <div className="card divide-y divide-gray-50">
               {user.sentParcels.map(p => (
                 <Link key={p.id} href={`/parcels/${p.id}`} className="flex items-center gap-3 px-4 py-3.5 hover:bg-gray-50 transition-colors">
@@ -99,10 +130,13 @@ export default async function DashboardPage() {
           </section>
         )}
 
-        {/* Carried parcels */}
+        {/* Active carried parcels */}
         {user.carriedParcels.length > 0 && (
           <section>
-            <h2 className="text-sm font-bold text-gray-400 uppercase tracking-wide mb-3 px-1">Parcels I&apos;m carrying</h2>
+            <div className="flex items-center justify-between mb-3 px-1">
+              <h2 className="text-sm font-bold text-gray-400 uppercase tracking-wide">Parcels I&apos;m carrying</h2>
+              <Link href="/profile?tab=parcels" className="text-xs text-orange-500 font-semibold">See all</Link>
+            </div>
             <div className="card divide-y divide-gray-50">
               {user.carriedParcels.map(p => (
                 <Link key={p.id} href={`/parcels/${p.id}`} className="flex items-center gap-3 px-4 py-3.5 hover:bg-gray-50 transition-colors">
@@ -122,10 +156,13 @@ export default async function DashboardPage() {
           </section>
         )}
 
-        {/* Trips */}
+        {/* Upcoming trips */}
         {user.trips.length > 0 && (
           <section>
-            <h2 className="text-sm font-bold text-gray-400 uppercase tracking-wide mb-3 px-1">My trips</h2>
+            <div className="flex items-center justify-between mb-3 px-1">
+              <h2 className="text-sm font-bold text-gray-400 uppercase tracking-wide">Upcoming trips</h2>
+              <Link href="/profile?tab=trips" className="text-xs text-orange-500 font-semibold">See all</Link>
+            </div>
             <div className="card divide-y divide-gray-50">
               {user.trips.map(t => (
                 <Link key={t.id} href={`/trips/${t.id}`} className="flex items-center gap-3 px-4 py-3.5 hover:bg-gray-50 transition-colors">
@@ -136,9 +173,7 @@ export default async function DashboardPage() {
                     <p className="text-xs text-gray-400 mt-0.5">{formatDate(t.departureTime)}</p>
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
-                    <span className={cn('badge', t.status === 'ACTIVE' ? 'bg-green-50 text-green-600' : 'bg-gray-50 text-gray-400')}>
-                      {t.status}
-                    </span>
+                    <span className="badge bg-green-50 text-green-600">ACTIVE</span>
                     <ChevronRight size={14} className="text-gray-300" />
                   </div>
                 </Link>
@@ -170,9 +205,10 @@ export default async function DashboardPage() {
           </section>
         )}
 
-        {user.sentParcels.length === 0 && user.carriedParcels.length === 0 && incomingParcels.length === 0 && (
+        {user.sentParcels.length === 0 && user.carriedParcels.length === 0 && user.trips.length === 0 && incomingParcels.length === 0 && (
           <div className="card p-10 text-center">
-            <p className="text-gray-400 text-sm">No activity yet. Send a parcel or post a trip to get started.</p>
+            <p className="text-gray-400 text-sm">No active items. Send a parcel or post a trip to get started.</p>
+            <p className="text-xs text-gray-300 mt-1">Past activity is in your <Link href="/profile?tab=parcels" className="text-orange-400">Profile</Link>.</p>
           </div>
         )}
 

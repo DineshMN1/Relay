@@ -41,6 +41,17 @@ export async function GET(req: NextRequest) {
         orderBy: { createdAt: 'desc' },
         take: 10,
       },
+      sentParcels: {
+        orderBy: { createdAt: 'desc' },
+        include: { carrier: { select: { name: true } } },
+      },
+      carriedParcels: {
+        orderBy: { createdAt: 'desc' },
+        include: { sender: { select: { name: true } } },
+      },
+      trips: {
+        orderBy: { departureTime: 'desc' },
+      },
       _count: {
         select: {
           sentParcels:    true,

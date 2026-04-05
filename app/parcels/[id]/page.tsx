@@ -3,14 +3,17 @@ import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import Link from 'next/link'
 import ParcelActions from './ParcelActions'
+import CancelParcel from './CancelParcel'
+import EditReward from './EditReward'
 import StatusStepper from '@/components/StatusStepper'
 import { formatCurrency, formatDate } from '@/lib/utils'
 import { ArrowLeft } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import dynamic from 'next/dynamic'
 
-const QRDisplay  = dynamic(() => import('@/components/QRDisplay'),  { ssr: false })
-const ParcelMap  = dynamic(() => import('@/components/ParcelMap'),  { ssr: false })
+const DeliveryTimeline = dynamic(() => import('./DeliveryTimeline'), { ssr: false })
+const QRDisplay        = dynamic(() => import('@/components/QRDisplay'),  { ssr: false })
+const ParcelMap        = dynamic(() => import('@/components/ParcelMap'),  { ssr: false })
 
 const statusStyle: Record<string, string> = {
   POSTED:    'bg-blue-50 text-blue-600',
@@ -117,7 +120,9 @@ export default async function ParcelPage({ params }: { params: { id: string } })
           {/* Details */}
           <div className="card p-5">
             <h2 className="text-xs font-bold text-gray-400 uppercase tracking-wide mb-4">Details</h2>
-            <div className="grid grid-cols-3 gap-3 text-center">
+
+            {/* Item + Weight — 2 col */}
+            <div className="grid grid-cols-2 gap-3 text-center mb-3">
               <div className="bg-gray-50 rounded-xl p-3">
                 <p className="text-xs text-gray-400">Item</p>
                 <p className="font-semibold text-sm text-gray-900 mt-1 truncate">{parcel.description}</p>
@@ -126,10 +131,17 @@ export default async function ParcelPage({ params }: { params: { id: string } })
                 <p className="text-xs text-gray-400">Weight</p>
                 <p className="font-semibold text-sm text-gray-900 mt-1">{parcel.weight} kg</p>
               </div>
-              <div className="bg-orange-50 rounded-xl p-3">
+            </div>
+
+            {/* Reward — full width so edit form never overflows */}
+            <div className="bg-orange-50 rounded-xl p-3">
+              <div className="flex items-center justify-between">
                 <p className="text-xs text-gray-400">Reward</p>
-                <p className="font-bold text-sm text-orange-500 mt-1">{formatCurrency(parcel.reward)}</p>
+                <p className="font-bold text-base text-orange-500">{formatCurrency(parcel.reward)}</p>
               </div>
+              {isSender && (parcel.status === 'POSTED' || parcel.status === 'MATCHED') && (
+                <EditReward parcelId={parcel.id} currentReward={parcel.reward} />
+              )}
             </div>
             <div className="mt-4 pt-4 border-t border-gray-50 space-y-1.5 text-sm text-gray-500">
               <div className="flex justify-between">
@@ -177,9 +189,24 @@ export default async function ParcelPage({ params }: { params: { id: string } })
             </div>
           )}
 
+          {/* Carrier: delivery timeline (ACCEPTED or PICKED_UP + location known) */}
+          {isCarrier && (parcel.status === 'ACCEPTED' || parcel.status === 'PICKED_UP') && carrierLocation && (
+            <DeliveryTimeline
+              pickupLat={parcel.pickupLat}   pickupLng={parcel.pickupLng}
+              dropLat={parcel.dropLat}       dropLng={parcel.dropLng}
+              carrierLat={carrierLocation.lat} carrierLng={carrierLocation.lng}
+              status={parcel.status as 'ACCEPTED' | 'PICKED_UP'}
+            />
+          )}
+
           {/* Carrier actions */}
           {isCarrier && (
             <ParcelActions parcelId={parcel.id} status={parcel.status} />
+          )}
+
+          {/* Sender: cancel option for POSTED or MATCHED */}
+          {isSender && (parcel.status === 'POSTED' || parcel.status === 'MATCHED') && (
+            <CancelParcel parcelId={parcel.id} />
           )}
 
         </div>

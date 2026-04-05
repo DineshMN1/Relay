@@ -17,6 +17,7 @@ export default function SendPage() {
   const [reward,         setReward]         = useState('50')
   const [recipientName,  setRecipientName]  = useState('')
   const [recipientEmail, setRecipientEmail] = useState('')
+  const [expiryDays,     setExpiryDays]     = useState('3')
   const [loading, setLoading] = useState(false)
   const [error,   setError]   = useState('')
   const [result,  setResult]  = useState<{
@@ -36,7 +37,7 @@ export default function SendPage() {
           pickupName: pickup.name, pickupLat: pickup.lat, pickupLng: pickup.lng,
           dropName:   drop.name,   dropLat:   drop.lat,   dropLng:   drop.lng,
           description: desc, weight, reward,
-          recipientName, recipientEmail,
+          recipientName, recipientEmail, expiryDays,
         }),
       })
       const data = await res.json()
@@ -150,6 +151,33 @@ export default function SendPage() {
                 className="input"
               />
             </div>
+          </div>
+
+          <div>
+            <label className="label">Listing expires in</label>
+            <div className="grid grid-cols-5 gap-2">
+              {[
+                { label: '1 day',  value: '1' },
+                { label: '2 days', value: '2' },
+                { label: '3 days', value: '3' },
+                { label: '5 days', value: '5' },
+                { label: '1 week', value: '7' },
+              ].map(opt => (
+                <button
+                  key={opt.value}
+                  type="button"
+                  onClick={() => setExpiryDays(opt.value)}
+                  className={`py-2 rounded-xl text-xs font-semibold border transition-colors ${
+                    expiryDays === opt.value
+                      ? 'bg-orange-500 text-white border-orange-500'
+                      : 'bg-white text-gray-500 border-gray-200 hover:border-orange-300'
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+            <p className="text-xs text-gray-400 mt-1.5">Parcel will auto-expire if no carrier picks it up</p>
           </div>
 
           <div className="border-t border-gray-100 pt-4 space-y-4">

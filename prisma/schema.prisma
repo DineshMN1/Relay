@@ -90,6 +90,7 @@ model Parcel {
   pickupOtp   String
   dropOtp     String
 
+  expiresAt   DateTime?
   status      ParcelStatus @default(POSTED)
   createdAt   DateTime     @default(now())
 

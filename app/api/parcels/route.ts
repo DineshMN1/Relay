@@ -11,7 +11,7 @@ export async function POST(req: NextRequest) {
   const session = await getSessionFromRequest(req)
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const { pickupName, pickupLat, pickupLng, dropName, dropLat, dropLng, description, weight, reward, recipientName, recipientEmail } =
+  const { pickupName, pickupLat, pickupLng, dropName, dropLat, dropLng, description, weight, reward, recipientName, recipientEmail, expiryDays } =
     await req.json()
 
   if (!pickupName || !pickupLat || !dropName || !dropLat || !description || !recipientName || !recipientEmail) {
@@ -20,6 +20,9 @@ export async function POST(req: NextRequest) {
 
   const pickupOtp = generateOTP()
   const dropOtp   = generateOTP()
+
+  const days = parseInt(expiryDays || '3', 10)
+  const expiresAt = new Date(Date.now() + days * 24 * 60 * 60 * 1000)
 
   const parcel = await prisma.parcel.create({
     data: {
@@ -33,6 +36,7 @@ export async function POST(req: NextRequest) {
       recipientEmail: recipientEmail.toLowerCase().trim(),
       pickupOtp,
       dropOtp,
+      expiresAt,
     },
   })
 
@@ -65,6 +69,15 @@ export async function POST(req: NextRequest) {
 export async function GET(req: NextRequest) {
   const session = await getSessionFromRequest(req)
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  // Lazy-expire: mark POSTED/MATCHED parcels whose expiresAt has passed
+  await prisma.parcel.updateMany({
+    where: {
+      status: { in: ['POSTED', 'MATCHED'] },
+      expiresAt: { not: null, lt: new Date() },
+    },
+    data: { status: 'EXPIRED' },
+  })
 
   const { searchParams } = new URL(req.url)
   const role = searchParams.get('role') // 'sender' | 'carrier'

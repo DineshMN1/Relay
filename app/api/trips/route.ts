@@ -40,8 +40,14 @@ export async function GET(req: NextRequest) {
   const session = await getSessionFromRequest(req)
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
+  // Lazy-complete: mark ACTIVE trips whose departure time has passed
+  await prisma.trip.updateMany({
+    where: { status: 'ACTIVE', departureTime: { lt: new Date() } },
+    data: { status: 'COMPLETED' },
+  })
+
   const trips = await prisma.trip.findMany({
-    where: { status: 'ACTIVE' },
+    where: { status: 'ACTIVE', departureTime: { gte: new Date() } },
     include: { user: { select: { id: true, name: true, email: true } } },
     orderBy: { departureTime: 'asc' },
   })
