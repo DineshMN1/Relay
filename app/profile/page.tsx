@@ -26,7 +26,7 @@ type TripItem = {
   id: string; fromName: string; toName: string; departureTime: string; status: string; createdAt: string
 }
 type ProfileData = {
-  id: string; name: string; email: string
+  id: string; name: string; email: string; phone: string | null
   wallet: { balance: number; transactions: Transaction[] } | null
   ratingsReceived: Rating[]
   sentParcels: ParcelItem[]
@@ -43,6 +43,7 @@ const statusStyle: Record<string, string> = {
   DELIVERED: 'bg-green-50 text-green-700',
   CANCELLED: 'bg-red-50 text-red-500',
   EXPIRED:   'bg-gray-50 text-gray-400',
+  RETURNED:  'bg-yellow-50 text-yellow-700',
   ACTIVE:    'bg-green-50 text-green-600',
   COMPLETED: 'bg-gray-50 text-gray-500',
 }
@@ -52,6 +53,7 @@ type Tab = 'profile' | 'parcels' | 'trips'
 export default function ProfilePage() {
   const [profile, setProfile] = useState<ProfileData | null>(null)
   const [name,    setName]    = useState('')
+  const [phone,   setPhone]   = useState('')
   const [loading, setLoading] = useState(true)
   const [saving,  setSaving]  = useState(false)
   const [saved,   setSaved]   = useState(false)
@@ -69,7 +71,7 @@ export default function ProfilePage() {
         if (!r.ok) throw new Error('Failed to load profile')
         return r.json()
       })
-      .then(d => { setProfile(d.user); setName(d.user.name) })
+      .then(d => { setProfile(d.user); setName(d.user.name); setPhone(d.user.phone ?? '') })
       .catch(() => setError('Failed to load profile. Please refresh the page.'))
       .finally(() => setLoading(false))
   }, [])
@@ -82,11 +84,11 @@ export default function ProfilePage() {
       const res  = await fetch('/api/profile', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name }),
+        body: JSON.stringify({ name, phone }),
       })
       const data = await res.json()
       if (!res.ok) { setError(data.error); return }
-      setProfile(prev => prev ? { ...prev, name: data.user.name } : prev)
+      setProfile(prev => prev ? { ...prev, name: data.user.name, phone: data.user.phone } : prev)
       setSaved(true)
       setTimeout(() => setSaved(false), 2000)
     } finally {
@@ -204,6 +206,16 @@ export default function ProfilePage() {
                     onChange={e => setName(e.target.value)}
                     className="input"
                   />
+                </div>
+                <div>
+                  <label className="label">Phone number <span className="text-gray-300 font-normal">(optional)</span></label>
+                  <input
+                    type="tel" value={phone}
+                    onChange={e => setPhone(e.target.value)}
+                    placeholder="+91 98765 43210"
+                    className="input"
+                  />
+                  <p className="text-xs text-gray-400 mt-1">Shared with senders/recipients you are coordinating with</p>
                 </div>
                 <div>
                   <label className="label">Email</label>

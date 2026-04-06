@@ -7,9 +7,29 @@ import Link from 'next/link'
 import dynamic from 'next/dynamic'
 import {
   ArrowLeft, Loader2, CheckCircle2, Package,
-  MapPin, Weight, IndianRupee, User, ChevronDown, ChevronUp, Phone,
+  MapPin, Weight, IndianRupee, ChevronDown, ChevronUp, Phone,
 } from 'lucide-react'
 const ParcelMap = dynamic(() => import('@/components/ParcelMap'), { ssr: false })
+
+function TravelContactRow({ name, phone, tag, tagColor }: { name: string; phone: string; tag: string; tagColor: string }) {
+  return (
+    <div className="flex items-center gap-3 bg-gray-50 rounded-xl px-3 py-2.5">
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2 mb-0.5">
+          <p className="font-semibold text-sm text-gray-900 truncate">{name}</p>
+          <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${tagColor}`}>{tag}</span>
+        </div>
+        <p className="text-xs text-gray-500">{phone}</p>
+      </div>
+      <a
+        href={`tel:${phone.replace(/\s/g, '')}`}
+        className="shrink-0 flex items-center gap-1.5 bg-green-500 hover:bg-green-600 text-white text-xs font-semibold px-3 py-2 rounded-lg transition-colors"
+      >
+        <Phone size={12} /> Call
+      </a>
+    </div>
+  )
+}
 
 type Location = { name: string; lat: number; lng: number } | null
 type Parcel = {
@@ -22,7 +42,7 @@ type Parcel = {
   status: string
   recipientName: string | null
   recipientPhone: string | null
-  sender: { name: string }
+  sender: { name: string; phone: string | null }
 }
 
 export default function TravelPage() {
@@ -212,28 +232,21 @@ export default function TravelPage() {
                         </div>
                       </div>
 
-                      {/* Sender */}
-                      <div className="flex items-center gap-2 text-xs text-gray-500">
-                        <User size={13} className="text-gray-300" />
-                        Sent by <span className="font-semibold text-gray-700">{p.sender.name}</span>
-                      </div>
-
-                      {/* Recipient phone */}
-                      {p.recipientPhone && (
-                        <div className="bg-gray-50 rounded-xl p-3 flex items-center justify-between gap-3">
-                          <div className="flex items-center gap-2 min-w-0">
-                            <Phone size={13} className="text-gray-400 shrink-0" />
-                            <div className="min-w-0">
-                              <p className="text-[11px] text-gray-400">Recipient{p.recipientName ? ` · ${p.recipientName}` : ''}</p>
-                              <p className="text-sm font-semibold text-gray-800">{p.recipientPhone}</p>
-                            </div>
-                          </div>
-                          <a
-                            href={`tel:${p.recipientPhone.replace(/\s/g, '')}`}
-                            className="shrink-0 flex items-center gap-1.5 bg-green-500 hover:bg-green-600 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors"
-                          >
-                            <Phone size={12} /> Call
-                          </a>
+                      {/* Contacts — sender + recipient phones */}
+                      {(p.sender.phone || p.recipientPhone) && (
+                        <div className="space-y-2">
+                          <p className="text-xs font-bold text-gray-400 uppercase tracking-wide">Contacts</p>
+                          {p.sender.phone && (
+                            <TravelContactRow name={p.sender.name} phone={p.sender.phone} tag="Sender" tagColor="bg-blue-50 text-blue-600" />
+                          )}
+                          {p.recipientPhone && (
+                            <TravelContactRow
+                              name={p.recipientName ?? 'Recipient'}
+                              phone={p.recipientPhone}
+                              tag="Recipient"
+                              tagColor="bg-purple-50 text-purple-600"
+                            />
+                          )}
                         </div>
                       )}
 

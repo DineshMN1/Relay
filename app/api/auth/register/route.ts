@@ -7,7 +7,7 @@ import { sendOTPEmail } from '@/lib/mailer'
 export const dynamic = 'force-dynamic'
 
 export async function POST(req: NextRequest) {
-  const { name, email, password, confirmPassword } = await req.json()
+  const { name, email, phone, password, confirmPassword } = await req.json()
 
   if (!name || !email || !password || !confirmPassword)
     return NextResponse.json({ error: 'All fields are required' }, { status: 400 })
@@ -27,10 +27,11 @@ export async function POST(req: NextRequest) {
   // Upsert a pending (unverified) user so we can attach the password
   await prisma.user.upsert({
     where: { email },
-    update: { name, password: passwordHash, emailVerified: false },
+    update: { name, phone: phone?.trim() || null, password: passwordHash, emailVerified: false },
     create: {
       name,
       email,
+      phone: phone?.trim() || null,
       password: passwordHash,
       emailVerified: false,
       wallet: { create: { balance: 0 } },

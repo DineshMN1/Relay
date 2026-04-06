@@ -35,6 +35,7 @@ const statusStyle: Record<string, string> = {
   DELIVERED: 'bg-green-50 text-green-700',
   CANCELLED: 'bg-red-50 text-red-500',
   EXPIRED:   'bg-gray-50 text-gray-400',
+  RETURNED:  'bg-yellow-50 text-yellow-700',
 }
 
 export default async function DashboardPage() {

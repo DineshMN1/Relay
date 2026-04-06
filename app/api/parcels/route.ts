@@ -99,7 +99,7 @@ export async function GET(req: NextRequest) {
     // Get all unaccepted parcels
     const candidates = await prisma.parcel.findMany({
       where: { status: { in: ['POSTED', 'MATCHED'] }, carrierId: null },
-      include: { sender: { select: { id: true, name: true } } },
+      include: { sender: { select: { id: true, name: true, phone: true } } },
       orderBy: { createdAt: 'desc' },
     })
 

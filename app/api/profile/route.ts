@@ -9,15 +9,15 @@ export async function PATCH(req: NextRequest) {
   const session = await getSessionFromRequest(req)
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const { name } = await req.json()
+  const { name, phone } = await req.json()
   if (!name || name.trim().length < 2) return NextResponse.json({ error: 'Name too short' }, { status: 400 })
 
   const user = await prisma.user.update({
     where: { id: session.userId },
-    data: { name: name.trim() },
+    data: { name: name.trim(), phone: phone?.trim() || null },
   })
 
-  return NextResponse.json({ user: { id: user.id, name: user.name, email: user.email } })
+  return NextResponse.json({ user: { id: user.id, name: user.name, email: user.email, phone: user.phone } })
 }
 
 // GET /api/profile — wallet + transactions

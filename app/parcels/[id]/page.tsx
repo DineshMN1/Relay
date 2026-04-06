@@ -7,9 +7,10 @@ import Link from 'next/link'
 import ParcelActions from './ParcelActions'
 import CancelParcel from './CancelParcel'
 import EditReward from './EditReward'
+import RepostParcel from './RepostParcel'
 import StatusStepper from '@/components/StatusStepper'
 import { formatCurrency, formatDate } from '@/lib/utils'
-import { ArrowLeft } from 'lucide-react'
+import { ArrowLeft, Phone } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import nextDynamic from 'next/dynamic'
 
@@ -26,6 +27,31 @@ const statusStyle: Record<string, string> = {
   PICKED_UP: 'bg-orange-50 text-orange-600',
   DELIVERED: 'bg-green-50 text-green-700',
   CANCELLED: 'bg-red-50 text-red-500',
+  RETURNING: 'bg-orange-50 text-orange-600',
+  RETURNED:  'bg-yellow-50 text-yellow-700',
+  EXPIRED:   'bg-gray-50 text-gray-400',
+}
+
+function ContactRow({
+  name, phone, tag, tagColor,
+}: { name: string; phone: string; tag: string; tagColor: string }) {
+  return (
+    <div className="flex items-center gap-3 bg-gray-50 rounded-xl px-3 py-2.5">
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2 mb-0.5">
+          <p className="font-semibold text-sm text-gray-900 truncate">{name}</p>
+          <span className={cn('text-[10px] font-bold px-1.5 py-0.5 rounded-full', tagColor)}>{tag}</span>
+        </div>
+        <p className="text-xs text-gray-500">{phone}</p>
+      </div>
+      <a
+        href={`tel:${phone.replace(/\s/g, '')}`}
+        className="shrink-0 flex items-center gap-1.5 bg-green-500 hover:bg-green-600 text-white text-xs font-semibold px-3 py-2 rounded-lg transition-colors"
+      >
+        <Phone size={12} /> Call
+      </a>
+    </div>
+  )
 }
 
 export default async function ParcelPage({ params }: { params: { id: string } }) {
@@ -35,8 +61,8 @@ export default async function ParcelPage({ params }: { params: { id: string } })
   const parcel = await prisma.parcel.findUnique({
     where: { id: params.id },
     include: {
-      sender:  { select: { id: true, name: true, email: true } },
-      carrier: { select: { id: true, name: true } },
+      sender:  { select: { id: true, name: true, email: true, phone: true } },
+      carrier: { select: { id: true, name: true, phone: true } },
     },
   })
   if (!parcel) redirect('/dashboard')
@@ -50,7 +76,8 @@ export default async function ParcelPage({ params }: { params: { id: string } })
     ? await prisma.carrierLocation.findUnique({ where: { userId: parcel.carrierId } })
     : null
 
-  const isActive = !['DELIVERED', 'CANCELLED', 'EXPIRED'].includes(parcel.status)
+  const isActive = !['DELIVERED', 'CANCELLED', 'EXPIRED', 'RETURNED'].includes(parcel.status) || parcel.status === 'RETURNING'
+  // Carrier is returning — parcel is still physically with them
 
   return (
     <div className="min-h-screen bg-gray-50 pb-20 sm:pb-0">
@@ -173,20 +200,6 @@ export default async function ParcelPage({ params }: { params: { id: string } })
                   <span className="font-medium text-gray-800">{parcel.recipientName}</span>
                 </div>
               )}
-              {isCarrier && parcel.recipientPhone && (
-                <div className="flex items-center justify-between pt-2 mt-0.5 border-t border-gray-50">
-                  <div>
-                    <p className="text-xs text-gray-400">Recipient phone</p>
-                    <p className="font-semibold text-gray-800 text-sm mt-0.5">{parcel.recipientPhone}</p>
-                  </div>
-                  <a
-                    href={`tel:${parcel.recipientPhone.replace(/\s/g, '')}`}
-                    className="bg-green-500 hover:bg-green-600 text-white text-xs font-semibold px-4 py-2 rounded-lg transition-colors"
-                  >
-                    Call
-                  </a>
-                </div>
-              )}
               {parcel.carrier && (
                 <div className="flex justify-between">
                   <span>Carrier</span>
@@ -200,19 +213,77 @@ export default async function ParcelPage({ params }: { params: { id: string } })
             </div>
           </div>
 
-          {/* Sender: pickup QR only */}
-          {isSender && parcel.status !== 'DELIVERED' && parcel.status !== 'CANCELLED' && (
+          {/* Contacts card — only show when there's at least one useful contact */}
+          {(
+            (isCarrier && (parcel.sender.phone || parcel.recipientPhone)) ||
+            ((isSender || isRecipient) && parcel.carrier?.phone)
+          ) && (
             <div className="card p-5">
-              <h2 className="text-xs font-bold text-gray-400 uppercase tracking-wide mb-1">Pickup QR</h2>
-              <p className="text-sm text-gray-500 mb-4">Show this to the carrier when they collect the parcel.</p>
-              <div className="max-w-[180px] mx-auto">
+              <h2 className="text-xs font-bold text-gray-400 uppercase tracking-wide mb-4">Contacts</h2>
+              <div className="space-y-3">
+
+                {/* Carrier sees: Sender */}
+                {isCarrier && parcel.sender.phone && (
+                  <ContactRow
+                    name={parcel.sender.name}
+                    phone={parcel.sender.phone}
+                    tag="Sender"
+                    tagColor="bg-blue-50 text-blue-600"
+                  />
+                )}
+
+                {/* Carrier sees: Recipient */}
+                {isCarrier && parcel.recipientPhone && (
+                  <ContactRow
+                    name={parcel.recipientName ?? 'Recipient'}
+                    phone={parcel.recipientPhone}
+                    tag="Recipient"
+                    tagColor="bg-purple-50 text-purple-600"
+                  />
+                )}
+
+                {/* Sender sees: Carrier */}
+                {isSender && parcel.carrier?.phone && (
+                  <ContactRow
+                    name={parcel.carrier.name}
+                    phone={parcel.carrier.phone}
+                    tag="Traveler"
+                    tagColor="bg-orange-50 text-orange-600"
+                  />
+                )}
+
+                {/* Recipient sees: Carrier */}
+                {isRecipient && !isSender && parcel.carrier?.phone && (
+                  <ContactRow
+                    name={parcel.carrier.name}
+                    phone={parcel.carrier.phone}
+                    tag="Traveler"
+                    tagColor="bg-orange-50 text-orange-600"
+                  />
+                )}
+
+              </div>
+            </div>
+          )}
+
+          {/* Sender: pickup QR only (including RETURNING) */}
+          {isSender && !['DELIVERED', 'CANCELLED', 'RETURNED'].includes(parcel.status) && (
+            <div className="card p-5 border-2 border-orange-400">
+              <h2 className="text-xs font-bold text-orange-600 uppercase tracking-wide mb-1">Pickup QR</h2>
+              <p className="text-sm text-gray-500 mb-4">
+                Show this to the carrier when they collect the parcel.
+                {parcel.status === 'RETURNING' && (
+                  <span className="block mt-1 text-orange-600 font-semibold">This parcel is being returned to you. Please show this QR to the carrier to receive it back.</span>
+                )}
+              </p>
+              <div className="max-w-[200px] mx-auto">
                 <QRDisplay value={`otp=${parcel.pickupOtp}`} label="Pickup" otp={parcel.pickupOtp} color="#f97316" />
               </div>
             </div>
           )}
 
           {/* Recipient: drop QR only */}
-          {isRecipient && !isSender && !['DELIVERED', 'CANCELLED', 'EXPIRED'].includes(parcel.status) && (
+          {isRecipient && !isSender && !['DELIVERED', 'CANCELLED', 'EXPIRED', 'RETURNED'].includes(parcel.status) && (
             <div className="card p-5">
               <h2 className="text-xs font-bold text-gray-400 uppercase tracking-wide mb-1">Your delivery QR</h2>
               <p className="text-sm text-gray-500 mb-4">Show this to the carrier when your parcel arrives.</p>
@@ -240,6 +311,16 @@ export default async function ParcelPage({ params }: { params: { id: string } })
           {/* Sender: cancel option for POSTED or MATCHED */}
           {isSender && (parcel.status === 'POSTED' || parcel.status === 'MATCHED') && (
             <CancelParcel parcelId={parcel.id} />
+          )}
+
+          {/* Sender: re-post after carrier returned it */}
+          {isSender && parcel.status === 'RETURNED' && (
+            <div className="space-y-3">
+              <div className="bg-yellow-50 border border-yellow-100 rounded-xl px-4 py-3 text-sm text-yellow-800">
+                The carrier returned this parcel. You can re-post it to find a new carrier.
+              </div>
+              <RepostParcel parcelId={parcel.id} />
+            </div>
           )}
 
         </div>

@@ -11,14 +11,21 @@ const STEPS = [
 
 const ORDER: Record<string, number> = {
   POSTED: 0, MATCHED: 1, ACCEPTED: 2, PICKED_UP: 3, DELIVERED: 4,
-  CANCELLED: -1, EXPIRED: -1,
+  CANCELLED: -1, EXPIRED: -1, RETURNED: -1,
+}
+
+const TERMINAL_MESSAGES: Record<string, { bg: string; text: string; msg: string }> = {
+  CANCELLED: { bg: 'bg-red-50',    text: 'text-red-500',    msg: 'Parcel cancelled' },
+  EXPIRED:   { bg: 'bg-gray-50',   text: 'text-gray-500',   msg: 'Parcel expired — no carrier found' },
+  RETURNED:  { bg: 'bg-yellow-50', text: 'text-yellow-700', msg: 'Returned to sender — carrier could not deliver' },
 }
 
 export default function StatusStepper({ status }: { status: string }) {
-  if (status === 'CANCELLED' || status === 'EXPIRED') {
+  const terminal = TERMINAL_MESSAGES[status]
+  if (terminal) {
     return (
-      <div className="px-4 py-3 bg-red-50 rounded-xl text-sm text-red-500 font-medium text-center">
-        {status === 'CANCELLED' ? 'Parcel cancelled' : 'Parcel expired — no carrier found'}
+      <div className={`px-4 py-3 ${terminal.bg} rounded-xl text-sm ${terminal.text} font-medium text-center`}>
+        {terminal.msg}
       </div>
     )
   }

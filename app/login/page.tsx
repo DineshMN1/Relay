@@ -21,6 +21,7 @@ export default function LoginPage() {
   // register fields
   const [regName,     setRegName]     = useState('')
   const [regEmail,    setRegEmail]    = useState('')
+  const [regPhone,    setRegPhone]    = useState('')
   const [regPassword, setRegPassword] = useState('')
   const [regConfirm,  setRegConfirm]  = useState('')
   const [showRegPass, setShowRegPass] = useState(false)
@@ -77,7 +78,7 @@ export default function LoginPage() {
       const res  = await fetch('/api/auth/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: regName, email: regEmail, password: regPassword, confirmPassword: regConfirm }),
+        body: JSON.stringify({ name: regName, email: regEmail, phone: regPhone, password: regPassword, confirmPassword: regConfirm }),
       })
       const data = await res.json()
       if (!res.ok) { setError(data.error); return }
@@ -420,6 +421,13 @@ export default function LoginPage() {
                     <input type="email" required value={regEmail}
                       onChange={e => setRegEmail(e.target.value)}
                       placeholder="you@example.com" className="input" />
+                  </div>
+                  <div>
+                    <label className="label">Phone number <span className="text-gray-300 font-normal">(optional)</span></label>
+                    <input type="tel" value={regPhone}
+                      onChange={e => setRegPhone(e.target.value)}
+                      placeholder="+91 98765 43210" className="input" />
+                    <p className="text-xs text-gray-400 mt-1">Shared with senders and recipients for coordination</p>
                   </div>
                   <div>
                     <label className="label">Password</label>

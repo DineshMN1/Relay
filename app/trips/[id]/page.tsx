@@ -32,6 +32,7 @@ const statusStyle: Record<string, string> = {
   PICKED_UP: 'bg-orange-50 text-orange-600',
   DELIVERED: 'bg-green-50 text-green-700',
   CANCELLED: 'bg-red-50 text-red-500',
+  RETURNED:  'bg-yellow-50 text-yellow-700',
 }
 
 export default function TripDetailPage({ params }: { params: { id: string } }) {
