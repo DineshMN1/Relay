@@ -17,6 +17,7 @@ export default function SendPage() {
   const [reward,         setReward]         = useState('50')
   const [recipientName,  setRecipientName]  = useState('')
   const [recipientEmail, setRecipientEmail] = useState('')
+  const [recipientPhone, setRecipientPhone] = useState('')
   const [expiryDays,     setExpiryDays]     = useState('3')
   const [loading, setLoading] = useState(false)
   const [error,   setError]   = useState('')
@@ -37,7 +38,7 @@ export default function SendPage() {
           pickupName: pickup.name, pickupLat: pickup.lat, pickupLng: pickup.lng,
           dropName:   drop.name,   dropLat:   drop.lat,   dropLng:   drop.lng,
           description: desc, weight, reward,
-          recipientName, recipientEmail, expiryDays,
+          recipientName, recipientEmail, recipientPhone, expiryDays,
         }),
       })
       const data = await res.json()
@@ -200,6 +201,16 @@ export default function SendPage() {
                 className="input"
               />
               <p className="text-xs text-gray-400 mt-1">They will see the drop QR when they log in</p>
+            </div>
+            <div>
+              <label className="label">Recipient phone <span className="text-gray-300 font-normal">(optional)</span></label>
+              <input
+                type="tel" value={recipientPhone}
+                onChange={e => setRecipientPhone(e.target.value)}
+                placeholder="+91 98765 43210"
+                className="input"
+              />
+              <p className="text-xs text-gray-400 mt-1">Shown to the carrier so they can call on arrival</p>
             </div>
           </div>
 

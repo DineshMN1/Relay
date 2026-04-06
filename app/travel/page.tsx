@@ -7,7 +7,7 @@ import Link from 'next/link'
 import dynamic from 'next/dynamic'
 import {
   ArrowLeft, Loader2, CheckCircle2, Package,
-  MapPin, Weight, IndianRupee, User, ChevronDown, ChevronUp,
+  MapPin, Weight, IndianRupee, User, ChevronDown, ChevronUp, Phone,
 } from 'lucide-react'
 const ParcelMap = dynamic(() => import('@/components/ParcelMap'), { ssr: false })
 
@@ -20,6 +20,8 @@ type Parcel = {
   weight: number
   reward: number
   status: string
+  recipientName: string | null
+  recipientPhone: string | null
   sender: { name: string }
 }
 
@@ -30,15 +32,21 @@ export default function TravelPage() {
   const [departureTime, setDepartureTime] = useState('')
   const [loading,   setLoading]   = useState(false)
   const [error,     setError]     = useState('')
-  const [tripId,    setTripId]    = useState<string | null>(null)
-  const [parcels,   setParcels]   = useState<Parcel[]>([])
-  const [expanded,  setExpanded]  = useState<string | null>(null)   // selected parcel id
-  const [accepting, setAccepting] = useState<string | null>(null)
+  const [tripId,         setTripId]         = useState<string | null>(null)
+  const [parcels,        setParcels]        = useState<Parcel[]>([])
+  const [parcelsLoading, setParcelsLoading] = useState(false)
+  const [expanded,       setExpanded]       = useState<string | null>(null)
+  const [accepting,      setAccepting]      = useState<string | null>(null)
 
   async function fetchParcels(id: string) {
-    const res  = await fetch(`/api/parcels?role=carrier&tripId=${id}`)
-    const data = await res.json()
-    setParcels(data.parcels || [])
+    setParcelsLoading(true)
+    try {
+      const res  = await fetch(`/api/parcels?role=carrier&tripId=${id}`)
+      const data = await res.json()
+      setParcels(data.parcels || [])
+    } finally {
+      setParcelsLoading(false)
+    }
   }
 
   async function handlePostTrip(e: React.FormEvent) {
@@ -104,8 +112,14 @@ export default function TravelPage() {
             </div>
           )}
 
-          {/* Empty state */}
-          {parcels.length === 0 && (
+          {/* Loading / empty state */}
+          {parcelsLoading && (
+            <div className="card p-10 text-center mt-6">
+              <Loader2 size={28} className="text-orange-400 animate-spin mx-auto mb-3" />
+              <p className="text-gray-400 text-sm">Looking for parcels on your route…</p>
+            </div>
+          )}
+          {!parcelsLoading && parcels.length === 0 && (
             <div className="card p-10 text-center mt-6">
               <Package size={32} className="text-gray-200 mx-auto mb-3" />
               <p className="text-gray-400 text-sm">No parcels along your route right now.</p>
@@ -115,7 +129,7 @@ export default function TravelPage() {
 
           {/* Parcel cards */}
           <div className="space-y-3 mt-4">
-            {parcels.map(p => {
+            {!parcelsLoading && parcels.map(p => {
               const isOpen = expanded === p.id
               return (
                 <div key={p.id} className="card overflow-hidden">
@@ -203,6 +217,25 @@ export default function TravelPage() {
                         <User size={13} className="text-gray-300" />
                         Sent by <span className="font-semibold text-gray-700">{p.sender.name}</span>
                       </div>
+
+                      {/* Recipient phone */}
+                      {p.recipientPhone && (
+                        <div className="bg-gray-50 rounded-xl p-3 flex items-center justify-between gap-3">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <Phone size={13} className="text-gray-400 shrink-0" />
+                            <div className="min-w-0">
+                              <p className="text-[11px] text-gray-400">Recipient{p.recipientName ? ` · ${p.recipientName}` : ''}</p>
+                              <p className="text-sm font-semibold text-gray-800">{p.recipientPhone}</p>
+                            </div>
+                          </div>
+                          <a
+                            href={`tel:${p.recipientPhone.replace(/\s/g, '')}`}
+                            className="shrink-0 flex items-center gap-1.5 bg-green-500 hover:bg-green-600 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors"
+                          >
+                            <Phone size={12} /> Call
+                          </a>
+                        </div>
+                      )}
 
                       {/* Manual accept */}
                       <button

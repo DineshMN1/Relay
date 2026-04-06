@@ -13,6 +13,8 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   if (!parcel) return NextResponse.json({ error: 'Parcel not found' }, { status: 404 })
   if (parcel.carrierId) return NextResponse.json({ error: 'Already accepted' }, { status: 400 })
   if (parcel.senderId === session.userId) return NextResponse.json({ error: 'Cannot carry your own parcel' }, { status: 400 })
+  if (parcel.recipientEmail && parcel.recipientEmail.toLowerCase() === session.email.toLowerCase())
+    return NextResponse.json({ error: 'Cannot carry a parcel addressed to you' }, { status: 400 })
 
   const updated = await prisma.parcel.update({
     where: { id: params.id },

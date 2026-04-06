@@ -13,9 +13,11 @@ import { ArrowLeft } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import nextDynamic from 'next/dynamic'
 
-const DeliveryTimeline = nextDynamic(() => import('./DeliveryTimeline'), { ssr: false })
-const QRDisplay        = nextDynamic(() => import('@/components/QRDisplay'),  { ssr: false })
-const ParcelMap        = nextDynamic(() => import('@/components/ParcelMap'),  { ssr: false })
+const DeliveryTimeline        = nextDynamic(() => import('./DeliveryTimeline'), { ssr: false })
+const QRDisplay               = nextDynamic(() => import('@/components/QRDisplay'),  { ssr: false })
+const ParcelMap               = nextDynamic(() => import('@/components/ParcelMap'),  { ssr: false })
+const AutoRefresh             = nextDynamic(() => import('@/components/AutoRefresh'), { ssr: false })
+const CarrierLocationTracker  = nextDynamic(() => import('@/components/CarrierLocationTracker'), { ssr: false })
 
 const statusStyle: Record<string, string> = {
   POSTED:    'bg-blue-50 text-blue-600',
@@ -48,8 +50,16 @@ export default async function ParcelPage({ params }: { params: { id: string } })
     ? await prisma.carrierLocation.findUnique({ where: { userId: parcel.carrierId } })
     : null
 
+  const isActive = !['DELIVERED', 'CANCELLED', 'EXPIRED'].includes(parcel.status)
+
   return (
     <div className="min-h-screen bg-gray-50 pb-20 sm:pb-0">
+      {/* Auto-refresh every 8s for active parcels so all parties see live status */}
+      {isActive && <AutoRefresh intervalMs={8000} />}
+      {/* Carrier location tracking when parcel is in transit */}
+      {isCarrier && (parcel.status === 'ACCEPTED' || parcel.status === 'PICKED_UP') && (
+        <CarrierLocationTracker />
+      )}
       <div className="max-w-lg mx-auto px-4 py-6">
 
         <div className="flex items-center gap-3 mb-6">
@@ -72,6 +82,13 @@ export default async function ParcelPage({ params }: { params: { id: string } })
             <h2 className="text-xs font-bold text-gray-400 uppercase tracking-wide mb-5">Delivery status</h2>
             <StatusStepper status={parcel.status} />
           </div>
+
+          {/* No carrier location hint */}
+          {(parcel.status === 'ACCEPTED' || parcel.status === 'PICKED_UP') && !carrierLocation && !isCarrier && (
+            <div className="bg-yellow-50 border border-yellow-100 text-yellow-700 text-sm rounded-xl px-4 py-3">
+              Carrier location not yet shared — the map will update once they start sharing their position.
+            </div>
+          )}
 
           {/* Map */}
           <div className="card p-5">
@@ -156,6 +173,20 @@ export default async function ParcelPage({ params }: { params: { id: string } })
                   <span className="font-medium text-gray-800">{parcel.recipientName}</span>
                 </div>
               )}
+              {isCarrier && parcel.recipientPhone && (
+                <div className="flex items-center justify-between pt-2 mt-0.5 border-t border-gray-50">
+                  <div>
+                    <p className="text-xs text-gray-400">Recipient phone</p>
+                    <p className="font-semibold text-gray-800 text-sm mt-0.5">{parcel.recipientPhone}</p>
+                  </div>
+                  <a
+                    href={`tel:${parcel.recipientPhone.replace(/\s/g, '')}`}
+                    className="bg-green-500 hover:bg-green-600 text-white text-xs font-semibold px-4 py-2 rounded-lg transition-colors"
+                  >
+                    Call
+                  </a>
+                </div>
+              )}
               {parcel.carrier && (
                 <div className="flex justify-between">
                   <span>Carrier</span>
@@ -181,7 +212,7 @@ export default async function ParcelPage({ params }: { params: { id: string } })
           )}
 
           {/* Recipient: drop QR only */}
-          {isRecipient && !isSender && parcel.status !== 'DELIVERED' && parcel.status !== 'CANCELLED' && (
+          {isRecipient && !isSender && !['DELIVERED', 'CANCELLED', 'EXPIRED'].includes(parcel.status) && (
             <div className="card p-5">
               <h2 className="text-xs font-bold text-gray-400 uppercase tracking-wide mb-1">Your delivery QR</h2>
               <p className="text-sm text-gray-500 mb-4">Show this to the carrier when your parcel arrives.</p>

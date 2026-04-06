@@ -14,6 +14,8 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
 
   if (!amount || amount < 10)
     return NextResponse.json({ error: 'Minimum reward is ₹10' }, { status: 400 })
+  if (amount > 10000)
+    return NextResponse.json({ error: 'Reward cannot exceed ₹10,000' }, { status: 400 })
 
   const parcel = await prisma.parcel.findUnique({ where: { id: params.id } })
   if (!parcel) return NextResponse.json({ error: 'Parcel not found' }, { status: 404 })

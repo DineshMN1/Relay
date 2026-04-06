@@ -65,8 +65,12 @@ export default function ProfilePage() {
 
   useEffect(() => {
     fetch('/api/profile')
-      .then(r => r.json())
+      .then(r => {
+        if (!r.ok) throw new Error('Failed to load profile')
+        return r.json()
+      })
       .then(d => { setProfile(d.user); setName(d.user.name) })
+      .catch(() => setError('Failed to load profile. Please refresh the page.'))
       .finally(() => setLoading(false))
   }, [])
 
@@ -98,6 +102,18 @@ export default function ProfilePage() {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <Loader2 size={24} className="animate-spin text-orange-500" />
+      </div>
+    )
+  }
+  if (error && !profile) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
+        <div className="card p-8 max-w-sm w-full text-center">
+          <p className="text-gray-700 font-medium">{error}</p>
+          <button onClick={() => window.location.reload()} className="btn-primary mt-4 px-6">
+            Retry
+          </button>
+        </div>
       </div>
     )
   }

@@ -14,6 +14,7 @@ export default function EditReward({ parcelId, currentReward }: { parcelId: stri
   async function save() {
     const amount = parseFloat(value)
     if (!amount || amount < 10) { setError('Minimum ₹10'); return }
+    if (amount > 10000) { setError('Maximum ₹10,000'); return }
     setError('')
     setLoading(true)
     try {
@@ -60,6 +61,7 @@ export default function EditReward({ parcelId, currentReward }: { parcelId: stri
           <input
             type="number"
             min={10}
+            max={10000}
             step={10}
             value={value}
             onChange={e => setValue(e.target.value)}

@@ -8,6 +8,24 @@ import Navbar from '@/components/Navbar'
 import { formatCurrency, formatDate } from '@/lib/utils'
 import { Package, Route, ChevronRight } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import DashboardTripCard from '@/components/DashboardTripCard'
+import AutoRefresh from '@/components/AutoRefresh'
+
+function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number) {
+  const R = 6371
+  const dLat = (lat2 - lat1) * Math.PI / 180
+  const dLng = (lng2 - lng1) * Math.PI / 180
+  const a = Math.sin(dLat / 2) ** 2 +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLng / 2) ** 2
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+}
+
+function formatEta(distKm: number) {
+  const mins = Math.round((distKm / 40) * 60) + 60 // 40 km/h avg + 1hr buffer
+  const now = new Date()
+  now.setMinutes(now.getMinutes() + mins)
+  return now.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true })
+}
 
 const statusStyle: Record<string, string> = {
   POSTED:    'bg-blue-50 text-blue-600',
@@ -59,6 +77,11 @@ export default async function DashboardPage() {
   })
   if (!user) redirect('/login')
 
+  // Fetch current user's carrier location for ETA calculations
+  const myCarrierLocation = await prisma.carrierLocation.findUnique({
+    where: { userId: session.userId },
+  })
+
   const incomingParcels = await prisma.parcel.findMany({
     where: {
       recipientEmail: user.email.toLowerCase(),
@@ -73,6 +96,8 @@ export default async function DashboardPage() {
 
   return (
     <div className="min-h-screen bg-gray-50 pb-20 sm:pb-0">
+      {/* Refresh every 15s to pick up status changes from other parties */}
+      <AutoRefresh intervalMs={15000} />
       <Navbar userName={user.name} />
 
       <div className="max-w-2xl mx-auto px-4 py-6 space-y-5">
@@ -140,20 +165,31 @@ export default async function DashboardPage() {
               <Link href="/profile?tab=parcels" className="text-xs text-orange-500 font-semibold">See all</Link>
             </div>
             <div className="card divide-y divide-gray-50">
-              {user.carriedParcels.map(p => (
-                <Link key={p.id} href={`/parcels/${p.id}`} className="flex items-center gap-3 px-4 py-3.5 hover:bg-gray-50 transition-colors">
-                  <div className="flex-1 min-w-0">
-                    <p className="font-medium text-sm text-gray-900 truncate">
-                      {p.pickupName.split(',')[0]} &rarr; {p.dropName.split(',')[0]}
-                    </p>
-                    <p className="text-xs text-gray-400 mt-0.5">{p.description}</p>
-                  </div>
-                  <div className="flex items-center gap-2 shrink-0">
-                    <span className={cn('badge', statusStyle[p.status])}>{p.status}</span>
-                    <ChevronRight size={14} className="text-gray-300" />
-                  </div>
-                </Link>
-              ))}
+              {user.carriedParcels.map(p => {
+                const showEta = p.status === 'PICKED_UP' && myCarrierLocation
+                const distKm = showEta
+                  ? haversineKm(myCarrierLocation!.lat, myCarrierLocation!.lng, p.dropLat, p.dropLng)
+                  : null
+                return (
+                  <Link key={p.id} href={`/parcels/${p.id}`} className="flex items-center gap-3 px-4 py-3.5 hover:bg-gray-50 transition-colors">
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium text-sm text-gray-900 truncate">
+                        {p.pickupName.split(',')[0]} &rarr; {p.dropName.split(',')[0]}
+                      </p>
+                      <p className="text-xs text-gray-400 mt-0.5">{p.description}</p>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      {distKm !== null && (
+                        <span className="text-xs text-orange-500 font-medium">
+                          {distKm < 1 ? `${Math.round(distKm * 1000)}m` : `${distKm.toFixed(1)}km`} · {formatEta(distKm)}
+                        </span>
+                      )}
+                      <span className={cn('badge', statusStyle[p.status])}>{p.status.replace('_', ' ')}</span>
+                      <ChevronRight size={14} className="text-gray-300" />
+                    </div>
+                  </Link>
+                )
+              })}
             </div>
           </section>
         )}
@@ -167,18 +203,13 @@ export default async function DashboardPage() {
             </div>
             <div className="card divide-y divide-gray-50">
               {user.trips.map(t => (
-                <Link key={t.id} href={`/trips/${t.id}`} className="flex items-center gap-3 px-4 py-3.5 hover:bg-gray-50 transition-colors">
-                  <div className="flex-1 min-w-0">
-                    <p className="font-medium text-sm text-gray-900 truncate">
-                      {t.fromName.split(',')[0]} &rarr; {t.toName.split(',')[0]}
-                    </p>
-                    <p className="text-xs text-gray-400 mt-0.5">{formatDate(t.departureTime)}</p>
-                  </div>
-                  <div className="flex items-center gap-2 shrink-0">
-                    <span className="badge bg-green-50 text-green-600">ACTIVE</span>
-                    <ChevronRight size={14} className="text-gray-300" />
-                  </div>
-                </Link>
+                <DashboardTripCard key={t.id} trip={{
+                  id: t.id,
+                  fromName: t.fromName,
+                  toName: t.toName,
+                  departureTime: t.departureTime.toISOString(),
+                  status: t.status,
+                }} />
               ))}
             </div>
           </section>

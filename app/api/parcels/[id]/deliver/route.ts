@@ -23,9 +23,10 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       where: { id: params.id },
       data: { status: 'DELIVERED' },
     }),
-    prisma.wallet.update({
+    prisma.wallet.upsert({
       where: { userId: session.userId },
-      data: { balance: { increment: parcel.reward } },
+      update: { balance: { increment: parcel.reward } },
+      create: { userId: session.userId, balance: parcel.reward },
     }),
     prisma.transaction.create({
       data: {
@@ -37,6 +38,22 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       },
     }),
   ])
+
+  // Auto-complete trip if all parcels on it are done
+  if (parcel.tripId) {
+    const remaining = await prisma.parcel.count({
+      where: {
+        tripId: parcel.tripId,
+        status: { notIn: ['DELIVERED', 'CANCELLED', 'EXPIRED'] },
+      },
+    })
+    if (remaining === 0) {
+      await prisma.trip.update({
+        where: { id: parcel.tripId },
+        data: { status: 'COMPLETED' },
+      })
+    }
+  }
 
   return NextResponse.json({ parcel: updated, earned: parcel.reward })
 }

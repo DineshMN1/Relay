@@ -11,12 +11,17 @@ export async function POST(req: NextRequest) {
   const session = await getSessionFromRequest(req)
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const { pickupName, pickupLat, pickupLng, dropName, dropLat, dropLng, description, weight, reward, recipientName, recipientEmail, expiryDays } =
+  const { pickupName, pickupLat, pickupLng, dropName, dropLat, dropLng, description, weight, reward, recipientName, recipientEmail, recipientPhone, expiryDays } =
     await req.json()
 
   if (!pickupName || !pickupLat || !dropName || !dropLat || !description || !recipientName || !recipientEmail) {
     return NextResponse.json({ error: 'All fields required' }, { status: 400 })
   }
+  const parsedWeight = parseFloat(weight || '1')
+  const parsedReward = parseFloat(reward || '50')
+  if (parsedWeight <= 0) return NextResponse.json({ error: 'Weight must be greater than 0' }, { status: 400 })
+  if (parsedReward < 10) return NextResponse.json({ error: 'Reward must be at least ₹10' }, { status: 400 })
+  if (parsedReward > 10000) return NextResponse.json({ error: 'Reward cannot exceed ₹10,000' }, { status: 400 })
 
   const pickupOtp = generateOTP()
   const dropOtp   = generateOTP()
@@ -30,10 +35,11 @@ export async function POST(req: NextRequest) {
       pickupName, pickupLat: parseFloat(pickupLat), pickupLng: parseFloat(pickupLng),
       dropName,   dropLat:   parseFloat(dropLat),   dropLng:   parseFloat(dropLng),
       description,
-      weight:  parseFloat(weight  || '1'),
-      reward:  parseFloat(reward  || '50'),
+      weight:  parsedWeight,
+      reward:  parsedReward,
       recipientName,
       recipientEmail: recipientEmail.toLowerCase().trim(),
+      recipientPhone: recipientPhone?.trim() || null,
       pickupOtp,
       dropOtp,
       expiresAt,

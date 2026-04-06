@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft, Loader2, Trash2, Clock, Package } from 'lucide-react'
+import { ArrowLeft, Loader2, Trash2, Clock, Package, CheckCircle2, XCircle } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 type Parcel = {
@@ -41,20 +41,34 @@ export default function TripDetailPage({ params }: { params: { id: string } }) {
   const [loading,       setLoading]       = useState(true)
   const [saving,        setSaving]        = useState(false)
   const [cancelling,    setCancelling]    = useState(false)
+  const [completing,    setCompleting]    = useState(false)
+  const [abandoning,    setAbandoning]    = useState(false)
   const [error,         setError]         = useState('')
   const [saved,         setSaved]         = useState(false)
 
-  useEffect(() => {
-    fetch(`/api/trips/${params.id}`)
+  function loadTrip() {
+    return fetch(`/api/trips/${params.id}`)
       .then(r => r.json())
       .then(d => {
+        if (!d.trip) return
         setTrip(d.trip)
-        // format for datetime-local input
         const dt = new Date(d.trip.departureTime)
         setDepartureTime(dt.toISOString().slice(0, 16))
       })
-      .finally(() => setLoading(false))
+  }
+
+  useEffect(() => {
+    loadTrip().finally(() => setLoading(false))
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [params.id])
+
+  // Poll for parcel status changes every 10s while trip is active
+  useEffect(() => {
+    if (!trip || trip.status !== 'ACTIVE') return
+    const id = setInterval(() => loadTrip(), 10000)
+    return () => clearInterval(id)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [trip?.status])
 
   async function handleSave(e: React.FormEvent) {
     e.preventDefault()
@@ -85,6 +99,47 @@ export default function TripDetailPage({ params }: { params: { id: string } }) {
       router.push('/dashboard')
     } finally {
       setCancelling(false)
+    }
+  }
+
+  async function handleComplete() {
+    // Check for undelivered parcels
+    const active = trip?.acceptedParcels.filter(
+      p => !['DELIVERED', 'CANCELLED', 'EXPIRED'].includes(p.status)
+    )
+    if (active && active.length > 0) {
+      if (!confirm(`${active.length} parcel(s) are not yet delivered. End trip anyway?`)) return
+    } else if (!confirm('Mark this trip as completed?')) return
+
+    setCompleting(true)
+    try {
+      const res = await fetch(`/api/trips/${params.id}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'complete' }),
+      })
+      const data = await res.json()
+      if (!res.ok) { setError(data.error); return }
+      setTrip(prev => prev ? { ...prev, status: 'COMPLETED' } : prev)
+    } finally {
+      setCompleting(false)
+    }
+  }
+
+  async function handleAbandon() {
+    if (!confirm('Mark trip as not completed? Matched parcels will be re-posted.')) return
+    setAbandoning(true)
+    try {
+      const res = await fetch(`/api/trips/${params.id}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'abandon' }),
+      })
+      const data = await res.json()
+      if (!res.ok) { setError(data.error); return }
+      router.push('/dashboard')
+    } finally {
+      setAbandoning(false)
     }
   }
 
@@ -204,16 +259,34 @@ export default function TripDetailPage({ params }: { params: { id: string } }) {
           </div>
         )}
 
-        {/* Cancel */}
+        {/* Trip actions */}
         {isActive && (
-          <button
-            onClick={handleCancel}
-            disabled={cancelling}
-            className="w-full flex items-center justify-center gap-2 py-3 rounded-xl border border-red-200 text-red-500 hover:bg-red-50 transition-colors text-sm font-semibold disabled:opacity-50"
-          >
-            {cancelling ? <Loader2 size={15} className="animate-spin" /> : <Trash2 size={15} />}
-            Cancel this trip
-          </button>
+          <div className="space-y-2">
+            <button
+              onClick={handleComplete}
+              disabled={completing}
+              className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-green-500 hover:bg-green-600 text-white transition-colors text-sm font-semibold disabled:opacity-50"
+            >
+              {completing ? <Loader2 size={15} className="animate-spin" /> : <CheckCircle2 size={15} />}
+              End trip (mark completed)
+            </button>
+            <button
+              onClick={handleAbandon}
+              disabled={abandoning}
+              className="w-full flex items-center justify-center gap-2 py-3 rounded-xl border border-yellow-300 text-yellow-700 hover:bg-yellow-50 transition-colors text-sm font-semibold disabled:opacity-50"
+            >
+              {abandoning ? <Loader2 size={15} className="animate-spin" /> : <XCircle size={15} />}
+              Trip not completed
+            </button>
+            <button
+              onClick={handleCancel}
+              disabled={cancelling}
+              className="w-full flex items-center justify-center gap-2 py-3 rounded-xl border border-red-200 text-red-500 hover:bg-red-50 transition-colors text-sm font-semibold disabled:opacity-50"
+            >
+              {cancelling ? <Loader2 size={15} className="animate-spin" /> : <Trash2 size={15} />}
+              Cancel this trip
+            </button>
+          </div>
         )}
 
       </div>

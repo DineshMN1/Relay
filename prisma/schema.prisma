@@ -81,6 +81,7 @@ model Parcel {
 
   recipientName  String?
   recipientEmail String?
+  recipientPhone String?
 
   description String
   weight      Float        @default(1)
