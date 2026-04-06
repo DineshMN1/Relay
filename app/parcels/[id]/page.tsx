@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic'
+
 import { redirect } from 'next/navigation'
 import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
@@ -9,11 +11,11 @@ import StatusStepper from '@/components/StatusStepper'
 import { formatCurrency, formatDate } from '@/lib/utils'
 import { ArrowLeft } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import dynamic from 'next/dynamic'
+import nextDynamic from 'next/dynamic'
 
-const DeliveryTimeline = dynamic(() => import('./DeliveryTimeline'), { ssr: false })
-const QRDisplay        = dynamic(() => import('@/components/QRDisplay'),  { ssr: false })
-const ParcelMap        = dynamic(() => import('@/components/ParcelMap'),  { ssr: false })
+const DeliveryTimeline = nextDynamic(() => import('./DeliveryTimeline'), { ssr: false })
+const QRDisplay        = nextDynamic(() => import('@/components/QRDisplay'),  { ssr: false })
+const ParcelMap        = nextDynamic(() => import('@/components/ParcelMap'),  { ssr: false })
 
 const statusStyle: Record<string, string> = {
   POSTED:    'bg-blue-50 text-blue-600',

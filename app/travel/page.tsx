@@ -4,14 +4,18 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import LocationSearch from '@/components/LocationSearch'
 import Link from 'next/link'
-import { ArrowLeft, Loader2, CheckCircle2, Package } from 'lucide-react'
-import { cn } from '@/lib/utils'
+import dynamic from 'next/dynamic'
+import {
+  ArrowLeft, Loader2, CheckCircle2, Package,
+  MapPin, Weight, IndianRupee, User, ChevronDown, ChevronUp,
+} from 'lucide-react'
+const ParcelMap = dynamic(() => import('@/components/ParcelMap'), { ssr: false })
 
 type Location = { name: string; lat: number; lng: number } | null
 type Parcel = {
   id: string
-  pickupName: string
-  dropName: string
+  pickupName: string; pickupLat: number; pickupLng: number
+  dropName: string;   dropLat: number;   dropLng: number
   description: string
   weight: number
   reward: number
@@ -24,13 +28,12 @@ export default function TravelPage() {
   const [from, setFrom] = useState<Location>(null)
   const [to,   setTo]   = useState<Location>(null)
   const [departureTime, setDepartureTime] = useState('')
-  const [loading,  setLoading]  = useState(false)
-  const [error,    setError]    = useState('')
-  const [tripId,   setTripId]   = useState<string | null>(null)
-  const [parcels,  setParcels]  = useState<Parcel[]>([])
+  const [loading,   setLoading]   = useState(false)
+  const [error,     setError]     = useState('')
+  const [tripId,    setTripId]    = useState<string | null>(null)
+  const [parcels,   setParcels]   = useState<Parcel[]>([])
+  const [expanded,  setExpanded]  = useState<string | null>(null)   // selected parcel id
   const [accepting, setAccepting] = useState<string | null>(null)
-
-  // fetchParcels is called directly after trip creation — no effect needed
 
   async function fetchParcels(id: string) {
     const res  = await fetch(`/api/parcels?role=carrier&tripId=${id}`)
@@ -64,6 +67,7 @@ export default function TravelPage() {
 
   async function acceptParcel(parcelId: string) {
     setAccepting(parcelId)
+    setError('')
     try {
       const res  = await fetch(`/api/parcels/${parcelId}/accept`, { method: 'POST' })
       const data = await res.json()
@@ -74,60 +78,158 @@ export default function TravelPage() {
     }
   }
 
+  // ── After trip posted: show parcel list ──────────────────────────────────
   if (tripId) {
     return (
       <div className="min-h-screen bg-gray-50 pb-20 sm:pb-0">
         <div className="max-w-lg mx-auto px-4 py-6">
+
+          {/* Header */}
           <div className="flex items-center gap-3 mb-2">
             <Link href="/dashboard" className="text-gray-400 hover:text-gray-600 transition-colors">
               <ArrowLeft size={20} />
             </Link>
-            <h1 className="text-xl font-bold text-gray-900">Parcels along your route</h1>
+            <div>
+              <h1 className="text-xl font-bold text-gray-900">Parcels along your route</h1>
+              <div className="flex items-center gap-1.5 text-xs text-gray-400 mt-0.5">
+                <CheckCircle2 size={12} className="text-green-500" />
+                {from?.name.split(',')[0]} → {to?.name.split(',')[0]}
+              </div>
+            </div>
           </div>
 
-          <div className="flex items-center gap-2 text-sm text-gray-500 mb-6 pl-8">
-            <CheckCircle2 size={14} className="text-green-500" />
-            {from?.name.split(',')[0]} &rarr; {to?.name.split(',')[0]}
-          </div>
+          {error && (
+            <div className="bg-red-50 border border-red-100 text-red-600 text-sm rounded-xl px-4 py-3 my-4">
+              {error}
+            </div>
+          )}
 
-          {parcels.length === 0 ? (
-            <div className="card p-10 text-center">
+          {/* Empty state */}
+          {parcels.length === 0 && (
+            <div className="card p-10 text-center mt-6">
               <Package size={32} className="text-gray-200 mx-auto mb-3" />
               <p className="text-gray-400 text-sm">No parcels along your route right now.</p>
               <p className="text-gray-300 text-xs mt-1">Check back before you leave.</p>
             </div>
-          ) : (
-            <div className="space-y-3">
-              {parcels.map(p => (
-                <div key={p.id} className="card p-4">
-                  <div className="flex justify-between items-start">
-                    <div className="flex-1 min-w-0">
-                      <p className="font-semibold text-sm text-gray-900">
-                        {p.pickupName.split(',')[0]} &rarr; {p.dropName.split(',')[0]}
-                      </p>
-                      <p className="text-xs text-gray-400 mt-0.5">{p.description} &middot; {p.weight}kg</p>
-                      <p className="text-xs text-gray-400">From {p.sender.name}</p>
-                    </div>
-                    <span className="text-lg font-black text-orange-500 ml-3">&#8377;{p.reward}</span>
-                  </div>
-                  <button
-                    onClick={() => acceptParcel(p.id)}
-                    disabled={accepting === p.id}
-                    className={cn('btn-primary w-full mt-3 text-sm flex items-center justify-center gap-2', '')}
-                  >
-                    {accepting === p.id
-                      ? <><Loader2 size={14} className="animate-spin" /> Accepting...</>
-                      : 'Accept & carry'}
-                  </button>
-                </div>
-              ))}
-            </div>
           )}
+
+          {/* Parcel cards */}
+          <div className="space-y-3 mt-4">
+            {parcels.map(p => {
+              const isOpen = expanded === p.id
+              return (
+                <div key={p.id} className="card overflow-hidden">
+
+                  {/* Summary row — tap to expand */}
+                  <button
+                    onClick={() => setExpanded(isOpen ? null : p.id)}
+                    className="w-full flex items-center gap-3 px-4 py-4 text-left hover:bg-gray-50 transition-colors"
+                  >
+                    {/* Route text */}
+                    <div className="flex-1 min-w-0">
+                      <p className="font-semibold text-sm text-gray-900 truncate">
+                        {p.pickupName.split(',')[0]} → {p.dropName.split(',')[0]}
+                      </p>
+                      <p className="text-xs text-gray-400 mt-0.5">
+                        {p.description} · {p.weight} kg · From {p.sender.name}
+                      </p>
+                    </div>
+                    {/* Reward + chevron */}
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span className="text-base font-black text-orange-500">₹{p.reward}</span>
+                      {isOpen
+                        ? <ChevronUp size={16} className="text-gray-300" />
+                        : <ChevronDown size={16} className="text-gray-300" />}
+                    </div>
+                  </button>
+
+                  {/* Expanded detail */}
+                  {isOpen && (
+                    <div className="border-t border-gray-50 px-4 pb-4 pt-3 space-y-4">
+
+                      {/* Map */}
+                      <div>
+                        <p className="text-xs font-bold text-gray-400 uppercase tracking-wide mb-2">Route preview</p>
+                        <div className="rounded-xl overflow-hidden">
+                          <ParcelMap
+                            pickupLat={p.pickupLat} pickupLng={p.pickupLng}
+                            dropLat={p.dropLat}     dropLng={p.dropLng}
+                          />
+                        </div>
+                        <div className="flex items-center gap-4 mt-2 text-xs text-gray-400">
+                          <span className="flex items-center gap-1">
+                            <span className="w-2 h-2 rounded-full bg-green-400 inline-block" /> Pickup
+                          </span>
+                          <span className="flex items-center gap-1">
+                            <span className="w-2 h-2 rounded-full bg-red-400 inline-block" /> Drop
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Info grid */}
+                      <div className="grid grid-cols-2 gap-2">
+                        <div className="bg-gray-50 rounded-xl p-3 flex items-start gap-2">
+                          <MapPin size={13} className="text-green-500 mt-0.5 shrink-0" />
+                          <div className="min-w-0">
+                            <p className="text-[11px] text-gray-400">Pickup</p>
+                            <p className="text-xs font-semibold text-gray-800 leading-tight truncate">{p.pickupName.split(',')[0]}</p>
+                          </div>
+                        </div>
+                        <div className="bg-gray-50 rounded-xl p-3 flex items-start gap-2">
+                          <MapPin size={13} className="text-red-400 mt-0.5 shrink-0" />
+                          <div className="min-w-0">
+                            <p className="text-[11px] text-gray-400">Drop</p>
+                            <p className="text-xs font-semibold text-gray-800 leading-tight truncate">{p.dropName.split(',')[0]}</p>
+                          </div>
+                        </div>
+                        <div className="bg-gray-50 rounded-xl p-3 flex items-start gap-2">
+                          <Weight size={13} className="text-gray-400 mt-0.5 shrink-0" />
+                          <div>
+                            <p className="text-[11px] text-gray-400">Weight</p>
+                            <p className="text-xs font-semibold text-gray-800">{p.weight} kg</p>
+                          </div>
+                        </div>
+                        <div className="bg-orange-50 rounded-xl p-3 flex items-start gap-2">
+                          <IndianRupee size={13} className="text-orange-500 mt-0.5 shrink-0" />
+                          <div>
+                            <p className="text-[11px] text-gray-400">Your reward</p>
+                            <p className="text-sm font-black text-orange-500">₹{p.reward}</p>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Sender */}
+                      <div className="flex items-center gap-2 text-xs text-gray-500">
+                        <User size={13} className="text-gray-300" />
+                        Sent by <span className="font-semibold text-gray-700">{p.sender.name}</span>
+                      </div>
+
+                      {/* Manual accept */}
+                      <button
+                        onClick={() => acceptParcel(p.id)}
+                        disabled={accepting === p.id}
+                        className="btn-primary w-full flex items-center justify-center gap-2 text-sm"
+                      >
+                        {accepting === p.id
+                          ? <><Loader2 size={14} className="animate-spin" /> Accepting...</>
+                          : 'Accept & carry this parcel'}
+                      </button>
+                      <p className="text-center text-xs text-gray-400 -mt-1">
+                        You'll be shown the pickup OTP after accepting
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+
         </div>
       </div>
     )
   }
 
+  // ── Trip form ──────────────────────────────────────────────────────────────
   return (
     <div className="min-h-screen bg-gray-50 pb-20 sm:pb-0">
       <div className="max-w-lg mx-auto px-4 py-6">
@@ -137,7 +239,7 @@ export default function TravelPage() {
           </Link>
           <div>
             <h1 className="text-xl font-bold text-gray-900">Post your trip</h1>
-            <p className="text-xs text-gray-400">We&apos;ll find parcels along your route</p>
+            <p className="text-xs text-gray-400">We'll find parcels along your route</p>
           </div>
         </div>
 
