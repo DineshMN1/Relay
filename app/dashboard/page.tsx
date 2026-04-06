@@ -41,56 +41,56 @@ export default async function DashboardPage() {
   const session = await getSession()
   if (!session) redirect('/login')
 
-  // Lazy-complete past trips before loading dashboard
-  await prisma.trip.updateMany({
-    where: { status: 'ACTIVE', departureTime: { lt: new Date() } },
-    data: { status: 'COMPLETED' },
-  })
-  // Lazy-expire overdue parcels
-  await prisma.parcel.updateMany({
-    where: { status: { in: ['POSTED', 'MATCHED'] }, expiresAt: { not: null, lt: new Date() } },
-    data: { status: 'EXPIRED' },
-  })
+  const now = new Date()
 
-  const user = await prisma.user.findUnique({
-    where: { id: session.userId },
-    include: {
-      wallet: true,
-      // Only active (in-progress) parcels on dashboard
-      sentParcels: {
-        where: { status: { in: ['POSTED', 'MATCHED', 'ACCEPTED', 'PICKED_UP'] } },
-        orderBy: { createdAt: 'desc' },
-        take: 5,
+  // Run both housekeeping writes in parallel — don't block one on the other
+  await Promise.all([
+    prisma.trip.updateMany({
+      where: { status: 'ACTIVE', departureTime: { lt: now } },
+      data: { status: 'COMPLETED' },
+    }),
+    prisma.parcel.updateMany({
+      where: { status: { in: ['POSTED', 'MATCHED'] }, expiresAt: { not: null, lt: now } },
+      data: { status: 'EXPIRED' },
+    }),
+  ])
+
+  // Run all three data reads in parallel — session.email avoids waiting for user first
+  const [user, myCarrierLocation, incomingParcels] = await Promise.all([
+    prisma.user.findUnique({
+      where: { id: session.userId },
+      include: {
+        wallet: true,
+        sentParcels: {
+          where: { status: { in: ['POSTED', 'MATCHED', 'ACCEPTED', 'PICKED_UP'] } },
+          orderBy: { createdAt: 'desc' },
+          take: 5,
+        },
+        carriedParcels: {
+          where: { status: { in: ['ACCEPTED', 'PICKED_UP'] } },
+          orderBy: { createdAt: 'desc' },
+          take: 5,
+        },
+        trips: {
+          where: { status: 'ACTIVE', departureTime: { gte: now } },
+          orderBy: { departureTime: 'asc' },
+          take: 3,
+        },
       },
-      carriedParcels: {
-        where: { status: { in: ['ACCEPTED', 'PICKED_UP'] } },
-        orderBy: { createdAt: 'desc' },
-        take: 5,
+    }),
+    prisma.carrierLocation.findUnique({ where: { userId: session.userId } }),
+    prisma.parcel.findMany({
+      where: {
+        recipientEmail: session.email.toLowerCase(),
+        status: { in: ['POSTED', 'MATCHED', 'ACCEPTED', 'PICKED_UP'] },
       },
-      // Only future active trips
-      trips: {
-        where: { status: 'ACTIVE', departureTime: { gte: new Date() } },
-        orderBy: { departureTime: 'asc' },
-        take: 3,
-      },
-    },
-  })
+      include: { sender: { select: { name: true } } },
+      orderBy: { createdAt: 'desc' },
+      take: 5,
+    }),
+  ])
+
   if (!user) redirect('/login')
-
-  // Fetch current user's carrier location for ETA calculations
-  const myCarrierLocation = await prisma.carrierLocation.findUnique({
-    where: { userId: session.userId },
-  })
-
-  const incomingParcels = await prisma.parcel.findMany({
-    where: {
-      recipientEmail: user.email.toLowerCase(),
-      status: { in: ['POSTED', 'MATCHED', 'ACCEPTED', 'PICKED_UP'] },
-    },
-    include: { sender: { select: { name: true } } },
-    orderBy: { createdAt: 'desc' },
-    take: 5,
-  })
 
   const firstName = user.name.split(' ')[0]
 

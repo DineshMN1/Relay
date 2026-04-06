@@ -1,17 +1,23 @@
 'use client'
 
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 
-/**
- * Invisible component that calls router.refresh() at a fixed interval.
- * Drop it into any server-rendered page that needs live data.
- */
 export default function AutoRefresh({ intervalMs = 10000 }: { intervalMs?: number }) {
   const router = useRouter()
+  const refreshing = useRef(false)
+
   useEffect(() => {
-    const id = setInterval(() => router.refresh(), intervalMs)
+    const id = setInterval(() => {
+      // Skip if tab is hidden or a refresh is already pending
+      if (document.hidden || refreshing.current) return
+      refreshing.current = true
+      router.refresh()
+      // Give the refresh ~3s to settle before allowing another
+      setTimeout(() => { refreshing.current = false }, 3000)
+    }, intervalMs)
     return () => clearInterval(id)
   }, [router, intervalMs])
+
   return null
 }
