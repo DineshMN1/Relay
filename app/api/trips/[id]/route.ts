@@ -4,8 +4,10 @@ import { prisma } from '@/lib/prisma'
 
 export const dynamic = 'force-dynamic'
 
+import { ParcelStatus } from '@prisma/client'
+
 // Statuses where the carrier physically has the parcel — trip cannot end until resolved
-const IN_HAND = ['PICKED_UP', 'RETURNING']
+const IN_HAND: ParcelStatus[] = ['PICKED_UP', 'RETURNING']
 
 // PATCH /api/trips/[id] — edit departure time
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
