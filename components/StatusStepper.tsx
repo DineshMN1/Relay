@@ -11,6 +11,7 @@ const STEPS = [
 
 const ORDER: Record<string, number> = {
   POSTED: 0, MATCHED: 1, ACCEPTED: 2, PICKED_UP: 3, DELIVERED: 4,
+  RETURNING: 3, // same visual position as PICKED_UP (carrier still has it)
   CANCELLED: -1, EXPIRED: -1, RETURNED: -1,
 }
 
@@ -21,6 +22,15 @@ const TERMINAL_MESSAGES: Record<string, { bg: string; text: string; msg: string 
 }
 
 export default function StatusStepper({ status }: { status: string }) {
+  // Special banner for RETURNING — not terminal, but needs explanation
+  if (status === 'RETURNING') {
+    return (
+      <div className="px-4 py-3 bg-orange-50 rounded-xl text-sm text-orange-700 font-medium text-center">
+        Carrier is returning this parcel — awaiting sender confirmation
+      </div>
+    )
+  }
+
   const terminal = TERMINAL_MESSAGES[status]
   if (terminal) {
     return (

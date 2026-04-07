@@ -32,6 +32,7 @@ const statusStyle: Record<string, string> = {
   MATCHED:   'bg-yellow-50 text-yellow-700',
   ACCEPTED:  'bg-violet-50 text-violet-600',
   PICKED_UP: 'bg-orange-50 text-orange-600',
+  RETURNING: 'bg-orange-50 text-orange-700',
   DELIVERED: 'bg-green-50 text-green-700',
   CANCELLED: 'bg-red-50 text-red-500',
   EXPIRED:   'bg-gray-50 text-gray-400',
@@ -63,12 +64,12 @@ export default async function DashboardPage() {
       include: {
         wallet: true,
         sentParcels: {
-          where: { status: { in: ['POSTED', 'MATCHED', 'ACCEPTED', 'PICKED_UP'] } },
+          where: { status: { in: ['POSTED', 'MATCHED', 'ACCEPTED', 'PICKED_UP', 'RETURNING'] } },
           orderBy: { createdAt: 'desc' },
           take: 5,
         },
         carriedParcels: {
-          where: { status: { in: ['ACCEPTED', 'PICKED_UP'] } },
+          where: { status: { in: ['ACCEPTED', 'PICKED_UP', 'RETURNING'] } },
           orderBy: { createdAt: 'desc' },
           take: 5,
         },
@@ -76,6 +77,13 @@ export default async function DashboardPage() {
           where: { status: 'ACTIVE', departureTime: { gte: now } },
           orderBy: { departureTime: 'asc' },
           take: 3,
+          include: {
+            // count parcels physically in hand per trip for the blocking indicator
+            acceptedParcels: {
+              where: { status: { in: ['PICKED_UP', 'RETURNING'] } },
+              select: { id: true },
+            },
+          },
         },
       },
     }),
@@ -210,6 +218,7 @@ export default async function DashboardPage() {
                   toName: t.toName,
                   departureTime: t.departureTime.toISOString(),
                   status: t.status,
+                  parcelsInHand: (t as typeof t & { acceptedParcels: { id: string }[] }).acceptedParcels.length,
                 }} />
               ))}
             </div>

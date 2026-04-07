@@ -4,6 +4,9 @@ import { prisma } from '@/lib/prisma'
 
 export const dynamic = 'force-dynamic'
 
+// Statuses where the carrier physically has the parcel — trip cannot end until resolved
+const IN_HAND = ['PICKED_UP', 'RETURNING']
+
 // PATCH /api/trips/[id] — edit departure time
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
   const session = await getSessionFromRequest(req)
@@ -15,7 +18,6 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   if (trip.status !== 'ACTIVE') return NextResponse.json({ error: 'Cannot edit a non-active trip' }, { status: 400 })
 
   const { departureTime } = await req.json()
-
   if (new Date(departureTime) <= new Date())
     return NextResponse.json({ error: 'Departure time must be in the future' }, { status: 400 })
 
@@ -23,7 +25,6 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     where: { id: params.id },
     data: { departureTime: new Date(departureTime) },
   })
-
   return NextResponse.json({ trip: updated })
 }
 
@@ -36,21 +37,20 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
   if (!trip) return NextResponse.json({ error: 'Trip not found' }, { status: 404 })
   if (trip.userId !== session.userId) return NextResponse.json({ error: 'Not your trip' }, { status: 403 })
 
-  // Revert any MATCHED parcels on this trip back to POSTED
+  // Block if carrier still physically has parcels
+  const inHand = await prisma.parcel.count({ where: { tripId: params.id, status: { in: IN_HAND } } })
+  if (inHand > 0)
+    return NextResponse.json({ error: `You have ${inHand} parcel(s) in hand. Deliver or return them before cancelling.` }, { status: 400 })
+
   await prisma.parcel.updateMany({
     where: { tripId: params.id, status: 'MATCHED' },
     data: { status: 'POSTED', tripId: null },
   })
-
-  await prisma.trip.update({
-    where: { id: params.id },
-    data: { status: 'CANCELLED' },
-  })
-
-  return NextResponse.json({ message: 'Trip cancelled' })
+  await prisma.trip.update({ where: { id: params.id }, data: { status: 'CANCELLED' } })
+  return NextResponse.json({ ok: true })
 }
 
-// POST /api/trips/[id] — manually complete or abandon a trip
+// POST /api/trips/[id] — complete or abandon
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
   const session = await getSessionFromRequest(req)
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -62,13 +62,17 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
 
   const { action } = await req.json()
 
+  // Block all actions if carrier has parcels physically in hand
+  const inHand = await prisma.parcel.count({ where: { tripId: params.id, status: { in: IN_HAND } } })
+  if (inHand > 0)
+    return NextResponse.json({ error: `You have ${inHand} parcel(s) in hand. Deliver or return them first.` }, { status: 400 })
+
   if (action === 'complete') {
     await prisma.trip.update({ where: { id: params.id }, data: { status: 'COMPLETED' } })
     return NextResponse.json({ ok: true, status: 'COMPLETED' })
   }
 
   if (action === 'abandon') {
-    // Revert MATCHED parcels back to POSTED
     await prisma.parcel.updateMany({
       where: { tripId: params.id, status: 'MATCHED' },
       data: { status: 'POSTED', tripId: null },
@@ -95,5 +99,10 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
   })
   if (!trip) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
-  return NextResponse.json({ trip })
+  // Include carrier's current location
+  const carrierLocation = await prisma.carrierLocation.findUnique({
+    where: { userId: session.userId },
+  })
+
+  return NextResponse.json({ trip, carrierLocation })
 }

@@ -71,20 +71,21 @@ export default async function ParcelPage({ params }: { params: { id: string } })
   const isCarrier   = parcel.carrierId === session.userId
   const isRecipient = parcel.recipientEmail?.toLowerCase() === session.email.toLowerCase()
 
-  // Fetch carrier location if parcel is in transit
-  const carrierLocation = (parcel.status === 'ACCEPTED' || parcel.status === 'PICKED_UP') && parcel.carrierId
+  // Fetch carrier location for all in-transit states (carrier still has parcel during RETURNING)
+  const inTransit = ['ACCEPTED', 'PICKED_UP', 'RETURNING'].includes(parcel.status)
+  const carrierLocation = inTransit && parcel.carrierId
     ? await prisma.carrierLocation.findUnique({ where: { userId: parcel.carrierId } })
     : null
 
-  const isActive = !['DELIVERED', 'CANCELLED', 'EXPIRED', 'RETURNED'].includes(parcel.status) || parcel.status === 'RETURNING'
-  // Carrier is returning — parcel is still physically with them
+  // RETURNING counts as active — carrier physically still has the parcel
+  const isActive = !['DELIVERED', 'CANCELLED', 'EXPIRED', 'RETURNED'].includes(parcel.status)
 
   return (
     <div className="min-h-screen bg-gray-50 pb-20 sm:pb-0">
       {/* Auto-refresh every 8s for active parcels so all parties see live status */}
       {isActive && <AutoRefresh intervalMs={8000} />}
-      {/* Carrier location tracking when parcel is in transit */}
-      {isCarrier && (parcel.status === 'ACCEPTED' || parcel.status === 'PICKED_UP') && (
+      {/* Carrier location tracking — keep going while carrier still has the parcel */}
+      {isCarrier && ['ACCEPTED', 'PICKED_UP', 'RETURNING'].includes(parcel.status) && (
         <CarrierLocationTracker />
       )}
       <div className="max-w-lg mx-auto px-4 py-6">
@@ -111,7 +112,7 @@ export default async function ParcelPage({ params }: { params: { id: string } })
           </div>
 
           {/* No carrier location hint */}
-          {(parcel.status === 'ACCEPTED' || parcel.status === 'PICKED_UP') && !carrierLocation && !isCarrier && (
+          {inTransit && !carrierLocation && !isCarrier && (
             <div className="bg-yellow-50 border border-yellow-100 text-yellow-700 text-sm rounded-xl px-4 py-3">
               Carrier location not yet shared — the map will update once they start sharing their position.
             </div>
@@ -282,8 +283,8 @@ export default async function ParcelPage({ params }: { params: { id: string } })
             </div>
           )}
 
-          {/* Recipient: drop QR only */}
-          {isRecipient && !isSender && !['DELIVERED', 'CANCELLED', 'EXPIRED', 'RETURNED'].includes(parcel.status) && (
+          {/* Recipient: drop QR — hide when returning/returned/terminal */}
+          {isRecipient && !isSender && !['DELIVERED', 'CANCELLED', 'EXPIRED', 'RETURNED', 'RETURNING'].includes(parcel.status) && (
             <div className="card p-5">
               <h2 className="text-xs font-bold text-gray-400 uppercase tracking-wide mb-1">Your delivery QR</h2>
               <p className="text-sm text-gray-500 mb-4">Show this to the carrier when your parcel arrives.</p>
@@ -293,7 +294,7 @@ export default async function ParcelPage({ params }: { params: { id: string } })
             </div>
           )}
 
-          {/* Carrier: delivery timeline (ACCEPTED or PICKED_UP + location known) */}
+          {/* Carrier: delivery timeline (in transit + location known, not during return) */}
           {isCarrier && (parcel.status === 'ACCEPTED' || parcel.status === 'PICKED_UP') && carrierLocation && (
             <DeliveryTimeline
               pickupLat={parcel.pickupLat}   pickupLng={parcel.pickupLng}
