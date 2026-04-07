@@ -97,7 +97,11 @@ export default function TravelPage() {
     setAccepting(parcelId)
     setError('')
     try {
-      const res  = await fetch(`/api/parcels/${parcelId}/accept`, { method: 'POST' })
+      const res  = await fetch(`/api/parcels/${parcelId}/accept`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tripId }),
+      })
       const data = await res.json()
       if (!res.ok) { setError(data.error); return }
       router.push(`/parcels/${parcelId}`)

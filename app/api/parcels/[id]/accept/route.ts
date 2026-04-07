@@ -16,9 +16,19 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   if (parcel.recipientEmail && parcel.recipientEmail.toLowerCase() === session.email.toLowerCase())
     return NextResponse.json({ error: 'Cannot carry a parcel addressed to you' }, { status: 400 })
 
+  const body = await req.json().catch(() => ({}))
+  const { tripId } = body as { tripId?: string }
+
+  // Verify the tripId belongs to this carrier if provided
+  if (tripId) {
+    const trip = await prisma.trip.findUnique({ where: { id: tripId } })
+    if (!trip || trip.userId !== session.userId)
+      return NextResponse.json({ error: 'Invalid trip' }, { status: 400 })
+  }
+
   const updated = await prisma.parcel.update({
     where: { id: params.id },
-    data: { carrierId: session.userId, status: 'ACCEPTED' },
+    data: { carrierId: session.userId, status: 'ACCEPTED', tripId: tripId ?? null },
   })
 
   return NextResponse.json({ parcel: updated })

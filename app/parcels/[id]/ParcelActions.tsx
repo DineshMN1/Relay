@@ -68,6 +68,12 @@ export default function ParcelActions({ parcelId, status }: Props) {
       const data = await res.json()
       if (!res.ok) { setReturnError(data.error); return }
       setConfirmRet(false)
+      // After withdrawal (ACCEPTED → POSTED) carrier is no longer on this parcel —
+      // redirect to dashboard so they don't land on a page where they have no role
+      if (data.stage === 'withdrawn') {
+        router.push('/dashboard')
+        return
+      }
       router.refresh()
     } finally { setReturning(false) }
   }
