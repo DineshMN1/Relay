@@ -10,7 +10,7 @@ import EditReward from './EditReward'
 import RepostParcel from './RepostParcel'
 import StatusStepper from '@/components/StatusStepper'
 import { formatCurrency, formatDate } from '@/lib/utils'
-import { ArrowLeft, Phone } from 'lucide-react'
+import { ArrowLeft, Phone, Route } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import nextDynamic from 'next/dynamic'
 
@@ -63,6 +63,7 @@ export default async function ParcelPage({ params }: { params: { id: string } })
     include: {
       sender:  { select: { id: true, name: true, email: true, phone: true } },
       carrier: { select: { id: true, name: true, phone: true } },
+      trip:    { select: { id: true, fromName: true, toName: true, departureTime: true, status: true } },
     },
   })
   if (!parcel) redirect('/dashboard')
@@ -75,6 +76,9 @@ export default async function ParcelPage({ params }: { params: { id: string } })
   const inTransit = ['ACCEPTED', 'PICKED_UP', 'RETURNING'].includes(parcel.status)
   const carrierLocation = inTransit && parcel.carrierId
     ? await prisma.carrierLocation.findUnique({ where: { userId: parcel.carrierId } })
+    : null
+  const tripPhase = parcel.trip
+    ? (parcel.trip.departureTime > new Date() ? 'Upcoming trip' : 'Ongoing trip')
     : null
 
   // RETURNING counts as active — carrier physically still has the parcel
@@ -213,6 +217,40 @@ export default async function ParcelPage({ params }: { params: { id: string } })
               </div>
             </div>
           </div>
+
+          {parcel.trip && (
+            <div className="card p-5">
+              <div className="flex items-center justify-between gap-3 mb-4">
+                <h2 className="text-xs font-bold text-gray-400 uppercase tracking-wide flex items-center gap-1.5">
+                  <Route size={13} /> Trip details
+                </h2>
+                <span className={cn(
+                  'badge',
+                  tripPhase === 'Upcoming trip' ? 'bg-yellow-50 text-yellow-700' : 'bg-green-50 text-green-600'
+                )}>
+                  {tripPhase}
+                </span>
+              </div>
+              <div className="space-y-3 text-sm">
+                <div>
+                  <p className="text-xs text-gray-400">Route</p>
+                  <p className="font-semibold text-gray-900 mt-0.5">
+                    {parcel.trip.fromName} &rarr; {parcel.trip.toName}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-400">Departure</p>
+                  <p className="font-medium text-gray-800 mt-0.5">{formatDate(parcel.trip.departureTime)}</p>
+                </div>
+                <Link
+                  href={`/trips/${parcel.trip.id}`}
+                  className="inline-flex items-center justify-center rounded-xl bg-orange-500 px-4 py-2 text-sm font-semibold text-white hover:bg-orange-600 transition-colors"
+                >
+                  Open trip
+                </Link>
+              </div>
+            </div>
+          )}
 
           {/* Contacts card — only show when there's at least one useful contact */}
           {(

@@ -12,7 +12,20 @@ type Trip = {
   toName: string
   departureTime: string | Date
   status: string
+  phase: 'UPCOMING' | 'ONGOING'
   parcelsInHand?: number  // PICKED_UP or RETURNING count
+}
+
+function getUpcomingLabel(departureTime: Date) {
+  const diffMs = departureTime.getTime() - Date.now()
+  if (diffMs <= 0) return 'Now'
+
+  const totalMinutes = Math.ceil(diffMs / (1000 * 60))
+  if (totalMinutes < 60) return `${totalMinutes}m`
+
+  const hours = Math.floor(totalMinutes / 60)
+  const minutes = totalMinutes % 60
+  return minutes === 0 ? `${hours}h` : `${hours}h ${minutes}m`
 }
 
 export default function DashboardTripCard({ trip }: { trip: Trip }) {
@@ -22,6 +35,7 @@ export default function DashboardTripCard({ trip }: { trip: Trip }) {
   const [actionError, setActionError] = useState('')
 
   const blocked = (trip.parcelsInHand ?? 0) > 0
+  const departure = new Date(trip.departureTime)
 
   async function endTrip(action: 'complete' | 'abandon') {
     if (blocked) {
@@ -57,13 +71,15 @@ export default function DashboardTripCard({ trip }: { trip: Trip }) {
           <p className="font-medium text-sm text-gray-900 truncate">
             {trip.fromName.split(',')[0]} &rarr; {trip.toName.split(',')[0]}
           </p>
-          <p className="text-xs text-gray-400 mt-0.5">{formatDate(new Date(trip.departureTime))}</p>
+          <p className="text-xs text-gray-400 mt-0.5">{formatDate(departure)}</p>
         </div>
         <div className="flex items-center gap-2 shrink-0">
           {blocked ? (
             <span className="badge bg-orange-50 text-orange-600 flex items-center gap-1">
               <Package size={10} /> {trip.parcelsInHand} in hand
             </span>
+          ) : trip.phase === 'UPCOMING' ? (
+            <span className="badge bg-yellow-50 text-yellow-700">{getUpcomingLabel(departure)}</span>
           ) : (
             <span className="badge bg-green-50 text-green-600">ACTIVE</span>
           )}
@@ -80,7 +96,7 @@ export default function DashboardTripCard({ trip }: { trip: Trip }) {
           href={`/trips/${trip.id}`}
           className="flex-1 text-xs py-1.5 rounded-lg bg-orange-500 text-white font-semibold hover:bg-orange-600 transition-colors text-center"
         >
-          {blocked ? 'View trip' : 'Open'}
+          {blocked ? 'View trip' : trip.phase === 'UPCOMING' ? 'Open' : 'Manage'}
         </Link>
         <button
           onClick={() => endTrip('complete')}

@@ -45,49 +45,57 @@ export default async function DashboardPage() {
 
   const now = new Date()
 
-  // Run both housekeeping writes in parallel — don't block one on the other
-  await Promise.all([
-    prisma.trip.updateMany({
-      where: { status: 'ACTIVE', departureTime: { lt: now } },
-      data: { status: 'COMPLETED' },
-    }),
-    prisma.parcel.updateMany({
-      where: { status: { in: ['POSTED', 'MATCHED'] }, expiresAt: { not: null, lt: now } },
-      data: { status: 'EXPIRED' },
-    }),
-  ])
-
-  // Run all three data reads in parallel — session.email avoids waiting for user first
-  const [user, myCarrierLocation, incomingParcels] = await Promise.all([
+  const [user, wallet, sentParcels, carriedParcels, trips, myCarrierLocation, incomingParcels] = await Promise.all([
     prisma.user.findUnique({
       where: { id: session.userId },
+      select: { id: true, name: true, email: true },
+    }),
+    prisma.wallet.findUnique({
+      where: { userId: session.userId },
+      select: { balance: true },
+    }),
+    prisma.parcel.findMany({
+      where: {
+        senderId: session.userId,
+        status: { in: ['POSTED', 'MATCHED', 'ACCEPTED', 'PICKED_UP', 'RETURNING'] },
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 5,
+    }),
+    prisma.parcel.findMany({
+      where: {
+        carrierId: session.userId,
+        status: { in: ['ACCEPTED', 'PICKED_UP', 'RETURNING'] },
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 5,
       include: {
-        wallet: true,
-        sentParcels: {
-          where: { status: { in: ['POSTED', 'MATCHED', 'ACCEPTED', 'PICKED_UP', 'RETURNING'] } },
-          orderBy: { createdAt: 'desc' },
-          take: 5,
-        },
-        carriedParcels: {
-          where: { status: { in: ['ACCEPTED', 'PICKED_UP', 'RETURNING'] } },
-          orderBy: { createdAt: 'desc' },
-          take: 5,
-        },
-        trips: {
-          where: { status: 'ACTIVE', departureTime: { gte: now } },
-          orderBy: { departureTime: 'asc' },
-          take: 3,
-          include: {
-            // count parcels physically in hand per trip for the blocking indicator
-            acceptedParcels: {
-              where: { status: { in: ['PICKED_UP', 'RETURNING'] } },
-              select: { id: true },
-            },
+        trip: {
+          select: {
+            id: true,
+            fromName: true,
+            toName: true,
+            departureTime: true,
+            status: true,
           },
         },
       },
     }),
-    prisma.carrierLocation.findUnique({ where: { userId: session.userId } }),
+    prisma.trip.findMany({
+      where: { userId: session.userId, status: 'ACTIVE' },
+      orderBy: { departureTime: 'asc' },
+      take: 10,
+      include: {
+        acceptedParcels: {
+          where: { status: { in: ['ACCEPTED', 'PICKED_UP', 'RETURNING'] } },
+          select: { id: true, status: true },
+        },
+      },
+    }),
+    prisma.carrierLocation.findUnique({
+      where: { userId: session.userId },
+      select: { lat: true, lng: true },
+    }),
     prisma.parcel.findMany({
       where: {
         recipientEmail: session.email.toLowerCase(),
@@ -102,6 +110,25 @@ export default async function DashboardPage() {
   if (!user) redirect('/login')
 
   const firstName = user.name.split(' ')[0]
+  const carryingTripIds = new Set(
+    carriedParcels
+      .map(parcel => parcel.trip?.id)
+      .filter((tripId): tripId is string => Boolean(tripId))
+  )
+
+  const visibleTrips = trips.filter(trip => !carryingTripIds.has(trip.id))
+  // Always compare ISO strings to avoid server/client Date mismatches
+  const nowISOString = now.toISOString()
+  // Compute phase on the server and pass as prop
+  const tripsWithPhase = visibleTrips.map(trip => {
+    const dep = typeof trip.departureTime === 'string' ? trip.departureTime : trip.departureTime.toISOString();
+    return {
+      ...trip,
+      phase: dep > nowISOString ? 'UPCOMING' : 'ONGOING',
+    };
+  });
+  const upcomingTrips = tripsWithPhase.filter(trip => trip.phase === 'UPCOMING');
+  const ongoingTrips = tripsWithPhase.filter(trip => trip.phase === 'ONGOING');
 
   return (
     <div className="min-h-screen bg-gray-50 pb-20 sm:pb-0">
@@ -117,7 +144,7 @@ export default async function DashboardPage() {
           <p className="text-xs text-orange-200 mt-0.5">{user.email}</p>
           <div className="mt-5">
             <p className="text-orange-200 text-xs uppercase tracking-widest font-semibold">Wallet balance</p>
-            <p className="text-4xl font-black mt-1">{formatCurrency(user.wallet?.balance ?? 0)}</p>
+            <p className="text-4xl font-black mt-1">{formatCurrency(wallet?.balance ?? 0)}</p>
           </div>
         </div>
 
@@ -140,14 +167,14 @@ export default async function DashboardPage() {
         </div>
 
         {/* Active sent parcels */}
-        {user.sentParcels.length > 0 && (
+        {sentParcels.length > 0 && (
           <section>
             <div className="flex items-center justify-between mb-3 px-1">
               <h2 className="text-sm font-bold text-gray-400 uppercase tracking-wide">Active parcels</h2>
               <Link href="/profile?tab=parcels" className="text-xs text-orange-500 font-semibold">See all</Link>
             </div>
             <div className="card divide-y divide-gray-50">
-              {user.sentParcels.map(p => (
+              {sentParcels.map(p => (
                 <Link key={p.id} href={`/parcels/${p.id}`} className="flex items-center gap-3 px-4 py-3.5 hover:bg-gray-50 transition-colors">
                   <div className="flex-1 min-w-0">
                     <p className="font-medium text-sm text-gray-900 truncate">
@@ -167,14 +194,14 @@ export default async function DashboardPage() {
         )}
 
         {/* Active carried parcels */}
-        {user.carriedParcels.length > 0 && (
+        {carriedParcels.length > 0 && (
           <section>
             <div className="flex items-center justify-between mb-3 px-1">
               <h2 className="text-sm font-bold text-gray-400 uppercase tracking-wide">Parcels I&apos;m carrying</h2>
               <Link href="/profile?tab=parcels" className="text-xs text-orange-500 font-semibold">See all</Link>
             </div>
             <div className="card divide-y divide-gray-50">
-              {user.carriedParcels.map(p => {
+              {carriedParcels.map(p => {
                 const showEta = p.status === 'PICKED_UP' && myCarrierLocation
                 const distKm = showEta
                   ? haversineKm(myCarrierLocation!.lat, myCarrierLocation!.lng, p.dropLat, p.dropLng)
@@ -186,6 +213,11 @@ export default async function DashboardPage() {
                         {p.pickupName.split(',')[0]} &rarr; {p.dropName.split(',')[0]}
                       </p>
                       <p className="text-xs text-gray-400 mt-0.5">{p.description}</p>
+                      {p.trip && (
+                        <p className="text-xs text-orange-500 mt-1">
+                          Trip: {p.trip.fromName.split(',')[0]} &rarr; {p.trip.toName.split(',')[0]}
+                        </p>
+                      )}
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
                       {distKm !== null && (
@@ -203,22 +235,50 @@ export default async function DashboardPage() {
           </section>
         )}
 
+        {/* Ongoing trips */}
+        {ongoingTrips.length > 0 && (
+          <section>
+            <div className="flex items-center justify-between mb-3 px-1">
+              <h2 className="text-sm font-bold text-gray-400 uppercase tracking-wide">Ongoing trips</h2>
+              <Link href="/profile?tab=trips" className="text-xs text-orange-500 font-semibold">See all</Link>
+            </div>
+            <div className="card divide-y divide-gray-50">
+              {ongoingTrips.map(t => (
+                <DashboardTripCard key={t.id} trip={{
+                  id: t.id,
+                  fromName: t.fromName,
+                  toName: t.toName,
+                  departureTime: typeof t.departureTime === 'string' ? t.departureTime : t.departureTime.toISOString(),
+                  status: t.status,
+                  phase: t.phase as 'UPCOMING' | 'ONGOING',
+                  parcelsInHand: Array.isArray(t.acceptedParcels)
+                    ? t.acceptedParcels.filter(parcel => ['PICKED_UP', 'RETURNING'].includes(parcel.status)).length
+                    : 0,
+                }} />
+              ))}
+            </div>
+          </section>
+        )}
+
         {/* Upcoming trips */}
-        {user.trips.length > 0 && (
+        {upcomingTrips.length > 0 && (
           <section>
             <div className="flex items-center justify-between mb-3 px-1">
               <h2 className="text-sm font-bold text-gray-400 uppercase tracking-wide">Upcoming trips</h2>
               <Link href="/profile?tab=trips" className="text-xs text-orange-500 font-semibold">See all</Link>
             </div>
             <div className="card divide-y divide-gray-50">
-              {user.trips.map(t => (
+              {upcomingTrips.map(t => (
                 <DashboardTripCard key={t.id} trip={{
                   id: t.id,
                   fromName: t.fromName,
                   toName: t.toName,
-                  departureTime: t.departureTime.toISOString(),
+                  departureTime: typeof t.departureTime === 'string' ? t.departureTime : t.departureTime.toISOString(),
                   status: t.status,
-                  parcelsInHand: (t as typeof t & { acceptedParcels: { id: string }[] }).acceptedParcels.length,
+                  phase: t.phase as 'UPCOMING' | 'ONGOING',
+                  parcelsInHand: Array.isArray(t.acceptedParcels)
+                    ? t.acceptedParcels.filter(parcel => ['PICKED_UP', 'RETURNING'].includes(parcel.status)).length
+                    : 0,
                 }} />
               ))}
             </div>
@@ -248,7 +308,7 @@ export default async function DashboardPage() {
           </section>
         )}
 
-        {user.sentParcels.length === 0 && user.carriedParcels.length === 0 && user.trips.length === 0 && incomingParcels.length === 0 && (
+        {sentParcels.length === 0 && carriedParcels.length === 0 && visibleTrips.length === 0 && incomingParcels.length === 0 && (
           <div className="card p-10 text-center">
             <p className="text-gray-400 text-sm">No active items. Send a parcel or post a trip to get started.</p>
             <p className="text-xs text-gray-300 mt-1">Past activity is in your <Link href="/profile?tab=parcels" className="text-orange-400">Profile</Link>.</p>

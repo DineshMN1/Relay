@@ -34,6 +34,7 @@ type Trip = {
 type CarrierLocation = { lat: number; lng: number } | null
 
 const statusStyle: Record<string, string> = {
+  POSTED:    'bg-blue-50 text-blue-600',
   MATCHED:   'bg-yellow-50 text-yellow-700',
   ACCEPTED:  'bg-violet-50 text-violet-600',
   PICKED_UP: 'bg-orange-50 text-orange-600',
@@ -44,6 +45,7 @@ const statusStyle: Record<string, string> = {
 }
 
 const statusLabel: Record<string, string> = {
+  POSTED:    'Posted',
   MATCHED:   'Matched',
   ACCEPTED:  'Accepted',
   PICKED_UP: 'In hand ✓',
@@ -58,6 +60,7 @@ const IN_HAND = ['PICKED_UP', 'RETURNING']
 export default function TripDetailPage({ params }: { params: { id: string } }) {
   const router = useRouter()
   const [trip,           setTrip]           = useState<Trip | null>(null)
+  const [availableParcels, setAvailableParcels] = useState<Parcel[]>([])
   const [carrierLoc,     setCarrierLoc]     = useState<CarrierLocation>(null)
   const [departureTime,  setDepartureTime]  = useState('')
   const [loading,        setLoading]        = useState(true)
@@ -75,6 +78,7 @@ export default function TripDetailPage({ params }: { params: { id: string } }) {
       .then(d => {
         if (!d.trip) return
         setTrip(d.trip)
+        setAvailableParcels(d.availableParcels ?? [])
         if (d.carrierLocation) setCarrierLoc(d.carrierLocation)
         const dt = new Date(d.trip.departureTime)
         setDepartureTime(dt.toISOString().slice(0, 16))
@@ -190,13 +194,14 @@ export default function TripDetailPage({ params }: { params: { id: string } }) {
   }
 
   const isActive     = trip.status === 'ACTIVE'
+  const allParcels = [...trip.acceptedParcels, ...availableParcels]
   const parcelsInHand = trip.acceptedParcels.filter(p => IN_HAND.includes(p.status))
   const blocked      = parcelsInHand.length > 0
 
   // Group parcels: in-hand first, then rest
   const sortedParcels = [
-    ...trip.acceptedParcels.filter(p => IN_HAND.includes(p.status)),
-    ...trip.acceptedParcels.filter(p => !IN_HAND.includes(p.status)),
+    ...allParcels.filter(p => IN_HAND.includes(p.status)),
+    ...allParcels.filter(p => !IN_HAND.includes(p.status)),
   ]
 
   return (

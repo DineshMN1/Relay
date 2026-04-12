@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSessionFromRequest } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { isParcelOnRoute } from '@/lib/route-match'
 
 export const dynamic = 'force-dynamic'
 
@@ -95,16 +96,39 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
     where: { id: params.id },
     include: {
       acceptedParcels: {
+        where: {
+          status: { in: ['MATCHED', 'ACCEPTED', 'PICKED_UP', 'RETURNING', 'DELIVERED'] },
+        },
         include: { sender: { select: { id: true, name: true } } },
+        orderBy: { createdAt: 'desc' },
       },
     },
   })
   if (!trip) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+
+  const candidates = await prisma.parcel.findMany({
+    where: {
+      status: { in: ['POSTED', 'MATCHED'] },
+      carrierId: null,
+    },
+    include: { sender: { select: { id: true, name: true } } },
+    orderBy: { createdAt: 'desc' },
+  })
+
+  const acceptedIds = new Set(trip.acceptedParcels.map(parcel => parcel.id))
+  const availableParcels = candidates.filter(parcel =>
+    !acceptedIds.has(parcel.id) &&
+    isParcelOnRoute(
+      trip.routeGeometry as unknown as GeoJSON.LineString,
+      parcel.pickupLat, parcel.pickupLng,
+      parcel.dropLat, parcel.dropLng,
+    )
+  )
 
   // Include carrier's current location
   const carrierLocation = await prisma.carrierLocation.findUnique({
     where: { userId: session.userId },
   })
 
-  return NextResponse.json({ trip, carrierLocation })
+  return NextResponse.json({ trip, availableParcels, carrierLocation })
 }
