@@ -7,8 +7,9 @@ import Link from 'next/link'
 import dynamic from 'next/dynamic'
 import {
   ArrowLeft, Loader2, CheckCircle2, Package,
-  MapPin, Weight, IndianRupee, ChevronDown, ChevronUp, Phone,
+  MapPin, Weight, IndianRupee, ChevronDown, ChevronUp, Phone, Zap,
 } from 'lucide-react'
+import { cn } from '@/lib/utils'
 const ParcelMap = dynamic(() => import('@/components/ParcelMap'), { ssr: false })
 
 function TravelContactRow({ name, phone, tag, tagColor }: { name: string; phone: string; tag: string; tagColor: string }) {
@@ -40,6 +41,7 @@ type Parcel = {
   weight: number
   reward: number
   status: string
+  urgentDeadline: string | null
   recipientName: string | null
   recipientPhone: string | null
   sender: { name: string; phone: string | null }
@@ -155,8 +157,14 @@ export default function TravelPage() {
           <div className="space-y-3 mt-4">
             {!parcelsLoading && parcels.map(p => {
               const isOpen = expanded === p.id
+              const deadlineMissed = p.urgentDeadline
+                ? new Date(departureTime) >= new Date(p.urgentDeadline)
+                : false
+              const deadlineTime = p.urgentDeadline
+                ? new Date(p.urgentDeadline).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true })
+                : null
               return (
-                <div key={p.id} className="card overflow-hidden">
+                <div key={p.id} className={cn('card overflow-hidden', p.urgentDeadline && 'border-red-200')}>
 
                   {/* Summary row — tap to expand */}
                   <button
@@ -171,6 +179,16 @@ export default function TravelPage() {
                       <p className="text-xs text-gray-400 mt-0.5">
                         {p.description} · {p.weight} kg · From {p.sender.name}
                       </p>
+                      {deadlineTime && (
+                        <span className={cn(
+                          'inline-flex items-center gap-1 text-[11px] font-semibold mt-1 px-2 py-0.5 rounded-full',
+                          deadlineMissed
+                            ? 'bg-gray-100 text-gray-400'
+                            : 'bg-red-50 text-red-500'
+                        )}>
+                          <Zap size={10} /> Before {deadlineTime}
+                        </span>
+                      )}
                     </div>
                     {/* Reward + chevron */}
                     <div className="flex items-center gap-2 shrink-0">
@@ -257,16 +275,25 @@ export default function TravelPage() {
                       {/* Manual accept */}
                       <button
                         onClick={() => acceptParcel(p.id)}
-                        disabled={accepting === p.id}
-                        className="btn-primary w-full flex items-center justify-center gap-2 text-sm"
+                        disabled={accepting === p.id || deadlineMissed}
+                        className={cn(
+                          'w-full flex items-center justify-center gap-2 text-sm py-3 rounded-xl font-semibold transition-colors',
+                          deadlineMissed
+                            ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                            : 'bg-orange-500 hover:bg-orange-600 text-white'
+                        )}
                       >
                         {accepting === p.id
                           ? <><Loader2 size={14} className="animate-spin" /> Accepting...</>
+                          : deadlineMissed
+                          ? 'Your trip departs after the deadline'
                           : 'Accept & carry this parcel'}
                       </button>
-                      <p className="text-center text-xs text-gray-400 -mt-1">
-                        You'll be shown the pickup OTP after accepting
-                      </p>
+                      {!deadlineMissed && (
+                        <p className="text-center text-xs text-gray-400 -mt-1">
+                          You'll be shown the pickup OTP after accepting
+                        </p>
+                      )}
                     </div>
                   )}
                 </div>

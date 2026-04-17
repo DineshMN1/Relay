@@ -6,7 +6,7 @@ import Link from 'next/link'
 import dynamic from 'next/dynamic'
 import {
   ArrowLeft, Loader2, Trash2, Clock, Package,
-  CheckCircle2, XCircle, AlertTriangle, MapPin,
+  CheckCircle2, XCircle, AlertTriangle, MapPin, IndianRupee, Zap,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -19,6 +19,7 @@ type Parcel = {
   description: string
   reward: number
   status: string
+  urgentDeadline: string | null
   sender: { name: string }
 }
 
@@ -70,6 +71,7 @@ export default function TripDetailPage({ params }: { params: { id: string } }) {
   const [abandoning,     setAbandoning]     = useState(false)
   const [error,          setError]          = useState('')
   const [saved,          setSaved]          = useState(false)
+  const [accepting,      setAccepting]      = useState<string | null>(null)
   const locationRef = useRef<(() => void) | null>(null)
 
   function loadTrip() {
@@ -165,6 +167,23 @@ export default function TripDetailPage({ params }: { params: { id: string } }) {
     } finally { setAbandoning(false) }
   }
 
+  async function acceptParcel(parcelId: string) {
+    setAccepting(parcelId)
+    setError('')
+    try {
+      const res = await fetch(`/api/parcels/${parcelId}/accept`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tripId: params.id }),
+      })
+      const data = await res.json()
+      if (!res.ok) { setError(data.error ?? 'Failed to accept'); return }
+      router.push(`/parcels/${parcelId}`)
+    } finally {
+      setAccepting(null)
+    }
+  }
+
   async function handleCancel() {
     if (!confirm('Cancel this trip? This cannot be undone.')) return
     setCancelling(true); setError('')
@@ -194,14 +213,14 @@ export default function TripDetailPage({ params }: { params: { id: string } }) {
   }
 
   const isActive     = trip.status === 'ACTIVE'
-  const allParcels = [...trip.acceptedParcels, ...availableParcels]
   const parcelsInHand = trip.acceptedParcels.filter(p => IN_HAND.includes(p.status))
   const blocked      = parcelsInHand.length > 0
 
-  // Group parcels: in-hand first, then rest
-  const sortedParcels = [
-    ...allParcels.filter(p => IN_HAND.includes(p.status)),
-    ...allParcels.filter(p => !IN_HAND.includes(p.status)),
+  // accepted parcels: already taken by this carrier (show status + link)
+  // available parcels: not yet accepted (show accept button)
+  const sortedAccepted = [
+    ...trip.acceptedParcels.filter(p => IN_HAND.includes(p.status)),
+    ...trip.acceptedParcels.filter(p => !IN_HAND.includes(p.status)),
   ]
 
   return (
@@ -262,7 +281,7 @@ export default function TripDetailPage({ params }: { params: { id: string } }) {
           <TripMap
             fromLat={trip.fromLat} fromLng={trip.fromLng} fromName={trip.fromName}
             toLat={trip.toLat}     toLng={trip.toLng}     toName={trip.toName}
-            parcels={sortedParcels}
+            parcels={[...sortedAccepted, ...availableParcels]}
             carrierLat={carrierLoc?.lat}
             carrierLng={carrierLoc?.lng}
           />
@@ -329,12 +348,12 @@ export default function TripDetailPage({ params }: { params: { id: string } }) {
           </div>
         )}
 
-        {/* Parcels */}
-        {sortedParcels.length > 0 && (
+        {/* Accepted parcels — already taken by this carrier */}
+        {sortedAccepted.length > 0 && (
           <div className="card overflow-hidden">
             <div className="px-5 py-4 border-b border-gray-50 flex items-center justify-between">
               <h2 className="text-xs font-bold text-gray-400 uppercase tracking-wide flex items-center gap-1.5">
-                <Package size={13} /> Parcels ({sortedParcels.length})
+                <Package size={13} /> My parcels ({sortedAccepted.length})
               </h2>
               {parcelsInHand.length > 0 && (
                 <span className="text-xs font-semibold text-orange-500">
@@ -343,7 +362,7 @@ export default function TripDetailPage({ params }: { params: { id: string } }) {
               )}
             </div>
             <div className="divide-y divide-gray-50">
-              {sortedParcels.map((p, i) => {
+              {sortedAccepted.map((p, i) => {
                 const inHand = IN_HAND.includes(p.status)
                 return (
                   <Link
@@ -354,7 +373,6 @@ export default function TripDetailPage({ params }: { params: { id: string } }) {
                       inHand && 'bg-orange-50/40'
                     )}
                   >
-                    {/* Index badge */}
                     <div className={cn(
                       'w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0',
                       inHand ? 'bg-orange-500 text-white' : 'bg-gray-100 text-gray-500'
@@ -382,8 +400,71 @@ export default function TripDetailPage({ params }: { params: { id: string } }) {
           </div>
         )}
 
+        {/* Available parcels along this route — can be accepted */}
+        {isActive && availableParcels.length > 0 && (
+          <div className="card overflow-hidden">
+            <div className="px-5 py-4 border-b border-gray-50">
+              <h2 className="text-xs font-bold text-gray-400 uppercase tracking-wide flex items-center gap-1.5">
+                <Package size={13} /> Available on your route ({availableParcels.length})
+              </h2>
+            </div>
+            <div className="divide-y divide-gray-50">
+              {availableParcels.map(p => {
+                const deadlineMissed = p.urgentDeadline
+                  ? new Date(trip.departureTime) >= new Date(p.urgentDeadline)
+                  : false
+                const deadlineTime = p.urgentDeadline
+                  ? new Date(p.urgentDeadline).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true })
+                  : null
+                return (
+                <div key={p.id} className="px-5 py-3.5">
+                  <div className="flex items-start gap-3">
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium text-sm text-gray-900 truncate">
+                        {p.pickupName.split(',')[0]} &rarr; {p.dropName.split(',')[0]}
+                      </p>
+                      <p className="text-xs text-gray-400 mt-0.5">
+                        {p.description} &middot; From {p.sender.name}
+                      </p>
+                      {deadlineTime && (
+                        <span className={cn(
+                          'inline-flex items-center gap-1 text-[11px] font-semibold mt-1 px-2 py-0.5 rounded-full',
+                          deadlineMissed ? 'bg-gray-100 text-gray-400' : 'bg-red-50 text-red-500'
+                        )}>
+                          <Zap size={10} /> Before {deadlineTime}
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <IndianRupee size={12} className="text-orange-500" />
+                      <span className="font-bold text-sm text-orange-500">{p.reward}</span>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => acceptParcel(p.id)}
+                    disabled={accepting === p.id || deadlineMissed}
+                    className={cn(
+                      'mt-2.5 w-full flex items-center justify-center gap-2 py-2 rounded-xl text-xs font-semibold transition-colors',
+                      deadlineMissed
+                        ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                        : 'bg-orange-500 hover:bg-orange-600 text-white disabled:opacity-60'
+                    )}
+                  >
+                    {accepting === p.id
+                      ? <><Loader2 size={12} className="animate-spin" /> Accepting…</>
+                      : deadlineMissed
+                      ? 'Your trip departs after the deadline'
+                      : 'Accept & carry this parcel'}
+                  </button>
+                </div>
+                )
+              })}
+            </div>
+          </div>
+        )}
+
         {/* Empty parcel state */}
-        {isActive && sortedParcels.length === 0 && (
+        {isActive && sortedAccepted.length === 0 && availableParcels.length === 0 && (
           <div className="card p-6 text-center">
             <Package size={28} className="text-gray-200 mx-auto mb-2" />
             <p className="text-sm text-gray-400">No parcels on this trip yet.</p>

@@ -19,11 +19,21 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   const body = await req.json().catch(() => ({}))
   const { tripId } = body as { tripId?: string }
 
-  // Verify the tripId belongs to this carrier if provided
+  // Verify the tripId belongs to this carrier and validate deadline if urgent
   if (tripId) {
     const trip = await prisma.trip.findUnique({ where: { id: tripId } })
     if (!trip || trip.userId !== session.userId)
       return NextResponse.json({ error: 'Invalid trip' }, { status: 400 })
+
+    if (parcel.urgentDeadline && trip.departureTime >= parcel.urgentDeadline) {
+      const timeStr = parcel.urgentDeadline.toLocaleTimeString('en-IN', {
+        hour: '2-digit', minute: '2-digit', hour12: true,
+      })
+      return NextResponse.json(
+        { error: `This parcel needs to depart before ${timeStr}. Your trip departs too late.` },
+        { status: 400 }
+      )
+    }
   }
 
   const updated = await prisma.parcel.update({

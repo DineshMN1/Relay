@@ -10,7 +10,7 @@ import EditReward from './EditReward'
 import RepostParcel from './RepostParcel'
 import StatusStepper from '@/components/StatusStepper'
 import { formatCurrency, formatDate } from '@/lib/utils'
-import { ArrowLeft, Phone, Route } from 'lucide-react'
+import { ArrowLeft, Phone, Route, Zap } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import nextDynamic from 'next/dynamic'
 
@@ -217,6 +217,19 @@ export default async function ParcelPage({ params }: { params: { id: string } })
               </div>
             </div>
           </div>
+
+          {/* Urgent deadline banner */}
+          {parcel.urgentDeadline && (
+            <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3.5 flex items-start gap-3">
+              <Zap size={16} className="text-red-500 shrink-0 mt-0.5" />
+              <div>
+                <p className="text-sm font-semibold text-red-700">Urgent delivery</p>
+                <p className="text-xs text-red-500 mt-0.5">
+                  Carrier must depart before {formatDate(parcel.urgentDeadline)}
+                </p>
+              </div>
+            </div>
+          )}
 
           {parcel.trip && (
             <div className="card p-5">

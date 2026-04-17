@@ -11,7 +11,7 @@ export async function POST(req: NextRequest) {
   const session = await getSessionFromRequest(req)
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const { pickupName, pickupLat, pickupLng, dropName, dropLat, dropLng, description, weight, reward, recipientName, recipientEmail, recipientPhone, expiryDays } =
+  const { pickupName, pickupLat, pickupLng, dropName, dropLat, dropLng, description, weight, reward, recipientName, recipientEmail, recipientPhone, expiryDays, urgentDeadline: urgentDeadlineRaw } =
     await req.json()
 
   if (!pickupName || !pickupLat || !dropName || !dropLat || !description || !recipientName || !recipientEmail) {
@@ -22,6 +22,10 @@ export async function POST(req: NextRequest) {
   if (parsedWeight <= 0) return NextResponse.json({ error: 'Weight must be greater than 0' }, { status: 400 })
   if (parsedReward < 10) return NextResponse.json({ error: 'Reward must be at least ₹10' }, { status: 400 })
   if (parsedReward > 10000) return NextResponse.json({ error: 'Reward cannot exceed ₹10,000' }, { status: 400 })
+
+  const urgentDeadline = urgentDeadlineRaw ? new Date(urgentDeadlineRaw) : null
+  if (urgentDeadline && urgentDeadline <= new Date())
+    return NextResponse.json({ error: 'Deadline must be in the future' }, { status: 400 })
 
   const pickupOtp = generateOTP()
   const dropOtp   = generateOTP()
@@ -43,12 +47,19 @@ export async function POST(req: NextRequest) {
       pickupOtp,
       dropOtp,
       expiresAt,
+      urgentDeadline,
     },
   })
 
-  // Auto-match with active trips
+  // Auto-match with active trips — for urgent parcels only match trips that depart before the deadline
   const activeTrips = await prisma.trip.findMany({
-    where: { status: 'ACTIVE', departureTime: { gte: new Date() } },
+    where: {
+      status: 'ACTIVE',
+      departureTime: {
+        gte: new Date(),
+        ...(urgentDeadline ? { lt: urgentDeadline } : {}),
+      },
+    },
   })
 
   let matchedTripId: string | null = null

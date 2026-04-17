@@ -56,9 +56,15 @@ export default function DashboardTripCard({ trip }: { trip: Trip }) {
         body: JSON.stringify({ action }),
       })
       const data = await res.json()
-      if (!res.ok) { setActionError(data.error ?? 'Failed'); return }
+      if (!res.ok) {
+        setActionError(data.error ?? 'Failed')
+        setCompleting(false)
+        setAbandoning(false)
+        return
+      }
+      // Keep spinner running — card unmounts once router.refresh() removes the trip
       router.refresh()
-    } finally {
+    } catch {
       setCompleting(false)
       setAbandoning(false)
     }

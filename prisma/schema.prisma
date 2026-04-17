@@ -92,6 +92,8 @@ model Parcel {
   pickupOtp   String
   dropOtp     String
 
+  urgentDeadline DateTime?   // null = normal, set = carrier must depart before this time
+
   expiresAt   DateTime?
   status      ParcelStatus @default(POSTED)
   createdAt   DateTime     @default(now())

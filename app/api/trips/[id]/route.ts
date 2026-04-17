@@ -71,14 +71,20 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     return NextResponse.json({ error: `You have ${inHand} parcel(s) in hand. Deliver or return them first.` }, { status: 400 })
 
   if (action === 'complete') {
+    // Re-post any parcels the carrier never picked up (MATCHED or ACCEPTED)
+    await prisma.parcel.updateMany({
+      where: { tripId: params.id, status: { in: ['MATCHED', 'ACCEPTED'] } },
+      data: { status: 'POSTED', carrierId: null, tripId: null },
+    })
     await prisma.trip.update({ where: { id: params.id }, data: { status: 'COMPLETED' } })
     return NextResponse.json({ ok: true, status: 'COMPLETED' })
   }
 
   if (action === 'abandon') {
+    // Re-post all undelivered parcels (MATCHED and ACCEPTED)
     await prisma.parcel.updateMany({
-      where: { tripId: params.id, status: 'MATCHED' },
-      data: { status: 'POSTED', tripId: null },
+      where: { tripId: params.id, status: { in: ['MATCHED', 'ACCEPTED'] } },
+      data: { status: 'POSTED', carrierId: null, tripId: null },
     })
     await prisma.trip.update({ where: { id: params.id }, data: { status: 'CANCELLED' } })
     return NextResponse.json({ ok: true, status: 'CANCELLED' })

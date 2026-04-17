@@ -4,7 +4,8 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import LocationSearch from '@/components/LocationSearch'
 import Link from 'next/link'
-import { ArrowLeft, Loader2, CheckCircle2, Copy } from 'lucide-react'
+import { ArrowLeft, Loader2, CheckCircle2, Copy, Zap } from 'lucide-react'
+import { cn } from '@/lib/utils'
 
 type Location = { name: string; lat: number; lng: number } | null
 
@@ -19,6 +20,8 @@ export default function SendPage() {
   const [recipientEmail, setRecipientEmail] = useState('')
   const [recipientPhone, setRecipientPhone] = useState('')
   const [expiryDays,     setExpiryDays]     = useState('3')
+  const [isUrgent,       setIsUrgent]       = useState(false)
+  const [urgentDeadline, setUrgentDeadline] = useState('')
   const [loading, setLoading] = useState(false)
   const [error,   setError]   = useState('')
   const [result,  setResult]  = useState<{
@@ -28,6 +31,7 @@ export default function SendPage() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     if (!pickup || !drop) { setError('Select both pickup and drop locations'); return }
+    if (isUrgent && !urgentDeadline) { setError('Set a deadline for urgent delivery'); return }
     setError('')
     setLoading(true)
     try {
@@ -39,6 +43,9 @@ export default function SendPage() {
           dropName:   drop.name,   dropLat:   drop.lat,   dropLng:   drop.lng,
           description: desc, weight, reward,
           recipientName, recipientEmail, recipientPhone, expiryDays,
+          urgentDeadline: isUrgent && urgentDeadline
+            ? new Date(urgentDeadline).toISOString()
+            : null,
         }),
       })
       const data = await res.json()
@@ -179,6 +186,46 @@ export default function SendPage() {
               ))}
             </div>
             <p className="text-xs text-gray-400 mt-1.5">Parcel will auto-expire if no carrier picks it up</p>
+          </div>
+
+          {/* Urgent delivery */}
+          <div className="border-t border-gray-100 pt-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-semibold text-gray-800 flex items-center gap-1.5">
+                  <Zap size={14} className={isUrgent ? 'text-red-500' : 'text-gray-300'} />
+                  Urgent delivery?
+                </p>
+                <p className="text-xs text-gray-400 mt-0.5">Carrier must depart before a set time</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => { setIsUrgent(v => !v); setUrgentDeadline('') }}
+                className={cn(
+                  'relative inline-flex h-6 w-11 items-center rounded-full transition-colors shrink-0',
+                  isUrgent ? 'bg-red-500' : 'bg-gray-200'
+                )}
+              >
+                <span className={cn(
+                  'inline-block h-4 w-4 rounded-full bg-white shadow transition-transform',
+                  isUrgent ? 'translate-x-6' : 'translate-x-1'
+                )} />
+              </button>
+            </div>
+            {isUrgent && (
+              <div className="mt-3">
+                <label className="label">Carrier must depart before</label>
+                <input
+                  type="datetime-local"
+                  value={urgentDeadline}
+                  onChange={e => setUrgentDeadline(e.target.value)}
+                  min={new Date().toISOString().slice(0, 16)}
+                  className="input"
+                  required
+                />
+                <p className="text-xs text-red-400 mt-1">Only travellers departing before this time can accept</p>
+              </div>
+            )}
           </div>
 
           <div className="border-t border-gray-100 pt-4 space-y-4">
